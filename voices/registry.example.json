@@ -1,0 +1,272 @@
+{
+  "version": 2,
+  "schema_version": 2,
+  "voice_map_version": "edge-v5",
+  "voice_audit": {
+    "at": "2026-11-05T00:00:00+0800",
+    "unavailable": [
+      {"voice": "zh-CN-XiaoshuangNeural", "replacement": "zh-CN-XiaoyiNeural", "error": "NoAudioReceived"},
+      {"voice": "zh-CN-YunyeNeural", "replacement": "zh-CN-YunjianNeural", "error": "NoAudioReceived"}
+    ],
+    "repaired_count": 0,
+    "note": "示例数据；真实运行时会按 voices/catalog.edge.json 自动平替不可用声线"
+  },
+  "identities": {
+    "林秋": {
+      "id": "林秋",
+      "canonical_name": "林秋",
+      "aliases": ["林先生"],
+      "gender": "男",
+      "gender_source": "manual",
+      "gender_confidence": 1.0,
+      "gender_confirmed": true,
+      "generic": false,
+      "persona": "低沉平稳，语速偏慢",
+      "books": ["example_book"],
+      "stage_profiles": {
+        "中年": {
+          "temperament": "沉稳",
+          "rate": "-4%",
+          "pitch": "-2Hz",
+          "volume": "+0%",
+          "prosody_source": "temperament",
+          "first_seen_chapter": 0,
+          "last_seen_chapter": 1,
+          "age_note": "",
+          "age_confidence": null,
+          "age_source": "auto",
+          "locked": true,
+          "transition": null,
+          "checked_chapters": [0, 1],
+          "legacy_edge_voice": "",
+          "updated_by": "manual",
+          "engine": "edge",
+          "class_name": "角色",
+          "line_count": 12
+        }
+      },
+      "created_at": "2026-11-05T00:00:00+0800",
+      "updated_at": "2026-11-05T00:00:00+0800",
+      "default_emotion": "平静",
+      "voice_style": "",
+      "gender_evidence": "",
+      "appearance_by_book": {
+        "example_book": {
+          "chapters_seen": 2,
+          "chapters": [0, 1],
+          "total_lines": 12,
+          "total_chars": 420,
+          "share": 0.18,
+          "first_seen_chapter": 0,
+          "last_seen_chapter": 1,
+          "idle_chapters": 0,
+          "source": "manual"
+        }
+      }
+    },
+    "苏晚": {
+      "id": "苏晚",
+      "canonical_name": "苏晚",
+      "aliases": ["苏姑娘"],
+      "gender": "女",
+      "gender_source": "manual",
+      "gender_confidence": 1.0,
+      "gender_confirmed": true,
+      "generic": false,
+      "persona": "清亮柔和，略带起伏",
+      "books": ["example_book"],
+      "stage_profiles": {
+        "青年": {
+          "temperament": "阴柔",
+          "rate": "+2%",
+          "pitch": "+2Hz",
+          "volume": "+0%",
+          "prosody_source": "temperament",
+          "first_seen_chapter": 0,
+          "last_seen_chapter": 1,
+          "age_note": "",
+          "age_confidence": null,
+          "age_source": "auto",
+          "locked": true,
+          "transition": null,
+          "checked_chapters": [0, 1],
+          "legacy_edge_voice": "",
+          "updated_by": "manual",
+          "engine": "edge",
+          "class_name": "角色",
+          "line_count": 9
+        }
+      },
+      "created_at": "2026-11-05T00:00:00+0800",
+      "updated_at": "2026-11-05T00:00:00+0800",
+      "default_emotion": "平静",
+      "voice_style": "",
+      "gender_evidence": "",
+      "appearance_by_book": {
+        "example_book": {
+          "chapters_seen": 2,
+          "chapters": [0, 1],
+          "total_lines": 9,
+          "total_chars": 310,
+          "share": 0.13,
+          "first_seen_chapter": 0,
+          "last_seen_chapter": 1,
+          "idle_chapters": 0,
+          "source": "manual"
+        }
+      }
+    },
+    "阿福": {
+      "id": "阿福",
+      "canonical_name": "阿福",
+      "aliases": ["老福"],
+      "gender": "男",
+      "gender_source": "manual",
+      "gender_confidence": 0.9,
+      "gender_confirmed": false,
+      "generic": false,
+      "persona": "苍老沙哑，气息偏弱",
+      "books": ["example_book"],
+      "stage_profiles": {
+        "老年": {
+          "temperament": "沧桑",
+          "rate": "-8%",
+          "pitch": "-4Hz",
+          "volume": "-2%",
+          "prosody_source": "temperament",
+          "first_seen_chapter": 1,
+          "last_seen_chapter": 1,
+          "age_note": "",
+          "age_confidence": null,
+          "age_source": "auto",
+          "locked": true,
+          "transition": null,
+          "checked_chapters": [1],
+          "legacy_edge_voice": "",
+          "updated_by": "manual",
+          "engine": "edge",
+          "class_name": "角色",
+          "line_count": 6
+        }
+      },
+      "created_at": "2026-11-05T00:00:00+0800",
+      "updated_at": "2026-11-05T00:00:00+0800",
+      "default_emotion": "平静",
+      "voice_style": "",
+      "gender_evidence": "",
+      "appearance_by_book": {
+        "example_book": {
+          "chapters_seen": 1,
+          "chapters": [1],
+          "total_lines": 6,
+          "total_chars": 190,
+          "share": 0.08,
+          "first_seen_chapter": 1,
+          "last_seen_chapter": 1,
+          "idle_chapters": 0,
+          "source": "manual"
+        }
+      }
+    }
+  },
+  "character_aliases": {
+    "林秋": "林秋",
+    "林先生": "林秋",
+    "苏晚": "苏晚",
+    "苏姑娘": "苏晚",
+    "阿福": "阿福",
+    "老福": "阿福"
+  },
+  "voice_bindings": {
+    "lock:林秋|中年": {
+      "id": "lock:林秋|中年",
+      "scope": "character_stage",
+      "book_id": null,
+      "character_id": "林秋",
+      "age_stage": "中年",
+      "voice": "zh-CN-YunyangNeural",
+      "rate": null,
+      "pitch": null,
+      "volume": null,
+      "source": "manual",
+      "locked": true,
+      "priority": 90,
+      "note": "示例：角色阶段手动绑定",
+      "legacy_voice": "",
+      "created_at": "2026-11-05T00:00:00+0800",
+      "updated_at": "2026-11-05T00:00:00+0800",
+      "updated_by": "manual",
+      "ladder_level": 1
+    },
+    "lock:苏晚|青年": {
+      "id": "lock:苏晚|青年",
+      "scope": "character_stage",
+      "book_id": null,
+      "character_id": "苏晚",
+      "age_stage": "青年",
+      "voice": "zh-CN-XiaoyiNeural",
+      "rate": null,
+      "pitch": null,
+      "volume": null,
+      "source": "manual",
+      "locked": true,
+      "priority": 90,
+      "note": "示例：角色阶段手动绑定",
+      "legacy_voice": "",
+      "created_at": "2026-11-05T00:00:00+0800",
+      "updated_at": "2026-11-05T00:00:00+0800",
+      "updated_by": "manual",
+      "ladder_level": 1
+    },
+    "lock:阿福|老年": {
+      "id": "lock:阿福|老年",
+      "scope": "character_stage",
+      "book_id": null,
+      "character_id": "阿福",
+      "age_stage": "老年",
+      "voice": "zh-CN-YunjianNeural",
+      "rate": null,
+      "pitch": null,
+      "volume": null,
+      "source": "manual",
+      "locked": true,
+      "priority": 90,
+      "note": "示例：角色阶段手动绑定",
+      "legacy_voice": "",
+      "created_at": "2026-11-05T00:00:00+0800",
+      "updated_at": "2026-11-05T00:00:00+0800",
+      "updated_by": "manual",
+      "ladder_level": 1
+    }
+  },
+  "voice_events": [],
+  "narrator": {
+    "global": {
+      "voice": "zh-CN-XiaoxiaoNeural",
+      "gender_preference": "female",
+      "rate": "-12%",
+      "pitch": "-4Hz",
+      "volume": "+0%",
+      "source": "config",
+      "locked": false
+    },
+    "books": {}
+  },
+  "book_settings": {
+    "example_book": {
+      "real_age": false,
+      "updated_at": "2026-11-05T00:00:00+0800"
+    }
+  },
+  "appearance_meta": {
+    "books": {
+      "example_book": {
+        "chapters": [0, 1],
+        "chapter_count": 2,
+        "total_chars": 2360,
+        "updated_at": "2026-11-05T00:00:00+0800"
+      }
+    },
+    "updated_at": "2026-11-05T00:00:00+0800"
+  }
+}

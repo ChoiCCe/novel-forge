@@ -1,0 +1,46 @@
+# 运行产物
+outputs/
+cache/
+novels/
+data/
+logs/
+*.log
+
+# 小说原文与音视频
+*.txt
+!requirements.txt
+*.epub
+*.wav
+*.mp3
+*.m4b
+*.srt
+corpus/
+
+# 密钥与本地配置
+.env
+*.env
+config.yaml
+voices/registry.json
+voices/refs/
+*.key
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 临时与备份
+*.bak
+*.bak.*
+*.bak-*
+*.tmp
+*.orig
+*.rej
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini

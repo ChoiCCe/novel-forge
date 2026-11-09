@@ -1,0 +1,479 @@
+{
+  "version": "edge-zh-20261105",
+  "verified_at": "2026-11-05",
+  "probe_method": "edge-tts 逐条试合成（tools/voice_catalog_build.py，每条最多 3 次）",
+  "probe_text": "这一句用来检查声线是否可以正常合成。",
+  "locales": {
+    "zh-CN": 7,
+    "zh-CN-liaoning": 1,
+    "zh-CN-shaanxi": 1,
+    "zh-HK": 3,
+    "zh-TW": 3
+  },
+  "voices": [
+    {
+      "id": "zh-CN-XiaoxiaoNeural",
+      "gender": "女",
+      "locale": "zh-CN",
+      "perceived_age": 30,
+      "stages": [
+        "青年",
+        "中年"
+      ],
+      "temperaments": [
+        "中性",
+        "沉稳",
+        "阴柔"
+      ],
+      "accented": false,
+      "dialect": "",
+      "available": true,
+      "status": "verified",
+      "error_type": "",
+      "error": "",
+      "probe_ms": 1342,
+      "checked_at": "2026-11-05T11:29:05+08:00"
+    },
+    {
+      "id": "zh-CN-XiaoxuanNeural",
+      "gender": "女",
+      "locale": "zh-CN",
+      "perceived_age": 55,
+      "stages": [
+        "中年",
+        "老年"
+      ],
+      "temperaments": [
+        "沉稳",
+        "威严",
+        "阴沉"
+      ],
+      "accented": false,
+      "dialect": "",
+      "available": true,
+      "status": "verified",
+      "error_type": "",
+      "error": "",
+      "probe_ms": 1970,
+      "checked_at": "2026-11-05T11:29:07+08:00"
+    },
+    {
+      "id": "zh-CN-XiaoyiNeural",
+      "gender": "女",
+      "locale": "zh-CN",
+      "perceived_age": 20,
+      "stages": [
+        "少年",
+        "青年",
+        "中年"
+      ],
+      "temperaments": [
+        "急躁",
+        "阴柔",
+        "中性"
+      ],
+      "accented": false,
+      "dialect": "",
+      "available": true,
+      "status": "verified",
+      "error_type": "",
+      "error": "",
+      "probe_ms": 1704,
+      "checked_at": "2026-11-05T11:29:09+08:00"
+    },
+    {
+      "id": "zh-CN-YunjianNeural",
+      "gender": "男",
+      "locale": "zh-CN",
+      "perceived_age": 48,
+      "stages": [
+        "青年",
+        "中年",
+        "老年"
+      ],
+      "temperaments": [
+        "豪爽",
+        "威严",
+        "急躁"
+      ],
+      "accented": false,
+      "dialect": "",
+      "available": true,
+      "status": "verified",
+      "error_type": "",
+      "error": "",
+      "probe_ms": 1995,
+      "checked_at": "2026-11-05T11:29:11+08:00"
+    },
+    {
+      "id": "zh-CN-YunxiNeural",
+      "gender": "男",
+      "locale": "zh-CN",
+      "perceived_age": 24,
+      "stages": [
+        "少年",
+        "青年",
+        "中年"
+      ],
+      "temperaments": [
+        "中性",
+        "急躁",
+        "阴柔"
+      ],
+      "accented": false,
+      "dialect": "",
+      "available": true,
+      "status": "verified",
+      "error_type": "",
+      "error": "",
+      "probe_ms": 1515,
+      "checked_at": "2026-11-05T11:29:12+08:00"
+    },
+    {
+      "id": "zh-CN-YunxiaNeural",
+      "gender": "男",
+      "locale": "zh-CN",
+      "perceived_age": 14,
+      "stages": [
+        "少年",
+        "青年"
+      ],
+      "temperaments": [
+        "中性",
+        "急躁",
+        "阴沉"
+      ],
+      "accented": false,
+      "dialect": "",
+      "available": true,
+      "status": "verified",
+      "error_type": "",
+      "error": "",
+      "probe_ms": 1381,
+      "checked_at": "2026-11-05T11:29:14+08:00"
+    },
+    {
+      "id": "zh-CN-YunyangNeural",
+      "gender": "男",
+      "locale": "zh-CN",
+      "perceived_age": 45,
+      "stages": [
+        "青年",
+        "中年",
+        "老年"
+      ],
+      "temperaments": [
+        "沉稳",
+        "威严",
+        "阴沉"
+      ],
+      "accented": false,
+      "dialect": "",
+      "available": true,
+      "status": "verified",
+      "error_type": "",
+      "error": "",
+      "probe_ms": 1272,
+      "checked_at": "2026-11-05T11:29:15+08:00"
+    },
+    {
+      "id": "zh-CN-liaoning-XiaobeiNeural",
+      "gender": "女",
+      "locale": "zh-CN-liaoning",
+      "perceived_age": 30,
+      "stages": [
+        "青年",
+        "中年"
+      ],
+      "temperaments": [
+        "豪爽",
+        "中性"
+      ],
+      "accented": true,
+      "dialect": "东北",
+      "available": true,
+      "status": "verified",
+      "error_type": "",
+      "error": "",
+      "probe_ms": 1783,
+      "checked_at": "2026-11-05T11:29:17+08:00"
+    },
+    {
+      "id": "zh-CN-shaanxi-XiaoniNeural",
+      "gender": "女",
+      "locale": "zh-CN-shaanxi",
+      "perceived_age": 30,
+      "stages": [
+        "青年",
+        "中年"
+      ],
+      "temperaments": [
+        "豪爽",
+        "中性"
+      ],
+      "accented": true,
+      "dialect": "陕西",
+      "available": true,
+      "status": "verified",
+      "error_type": "",
+      "error": "",
+      "probe_ms": 1270,
+      "checked_at": "2026-11-05T11:29:18+08:00"
+    },
+    {
+      "id": "zh-HK-HiuGaaiNeural",
+      "gender": "女",
+      "locale": "zh-HK",
+      "perceived_age": 28,
+      "stages": [
+        "青年",
+        "中年"
+      ],
+      "temperaments": [],
+      "accented": true,
+      "dialect": "粤语",
+      "available": true,
+      "status": "verified",
+      "error_type": "",
+      "error": "",
+      "probe_ms": 2045,
+      "checked_at": "2026-11-05T11:29:20+08:00"
+    },
+    {
+      "id": "zh-HK-HiuMaanNeural",
+      "gender": "女",
+      "locale": "zh-HK",
+      "perceived_age": 32,
+      "stages": [
+        "青年",
+        "中年"
+      ],
+      "temperaments": [],
+      "accented": true,
+      "dialect": "粤语",
+      "available": true,
+      "status": "verified",
+      "error_type": "",
+      "error": "",
+      "probe_ms": 1906,
+      "checked_at": "2026-11-05T11:29:22+08:00"
+    },
+    {
+      "id": "zh-HK-WanLungNeural",
+      "gender": "男",
+      "locale": "zh-HK",
+      "perceived_age": 35,
+      "stages": [
+        "青年",
+        "中年"
+      ],
+      "temperaments": [],
+      "accented": true,
+      "dialect": "粤语",
+      "available": true,
+      "status": "verified",
+      "error_type": "",
+      "error": "",
+      "probe_ms": 2284,
+      "checked_at": "2026-11-05T11:29:24+08:00"
+    },
+    {
+      "id": "zh-TW-HsiaoChenNeural",
+      "gender": "女",
+      "locale": "zh-TW",
+      "perceived_age": 28,
+      "stages": [
+        "青年",
+        "中年"
+      ],
+      "temperaments": [],
+      "accented": true,
+      "dialect": "台湾腔",
+      "available": true,
+      "status": "verified",
+      "error_type": "",
+      "error": "",
+      "probe_ms": 1653,
+      "checked_at": "2026-11-05T11:29:26+08:00"
+    },
+    {
+      "id": "zh-TW-HsiaoYuNeural",
+      "gender": "女",
+      "locale": "zh-TW",
+      "perceived_age": 24,
+      "stages": [
+        "少年",
+        "青年"
+      ],
+      "temperaments": [],
+      "accented": true,
+      "dialect": "台湾腔",
+      "available": true,
+      "status": "verified",
+      "error_type": "",
+      "error": "",
+      "probe_ms": 1934,
+      "checked_at": "2026-11-05T11:29:28+08:00"
+    },
+    {
+      "id": "zh-TW-YunJheNeural",
+      "gender": "男",
+      "locale": "zh-TW",
+      "perceived_age": 30,
+      "stages": [
+        "青年",
+        "中年"
+      ],
+      "temperaments": [],
+      "accented": true,
+      "dialect": "台湾腔",
+      "available": true,
+      "status": "verified",
+      "error_type": "",
+      "error": "",
+      "probe_ms": 2422,
+      "checked_at": "2026-11-05T11:29:30+08:00"
+    }
+  ],
+  "unavailable": [],
+  "pool_capacity": {
+    "main": {
+      "少年": {
+        "男": [
+          "zh-CN-YunxiNeural",
+          "zh-CN-YunxiaNeural"
+        ],
+        "女": [
+          "zh-CN-XiaoyiNeural"
+        ]
+      },
+      "青年": {
+        "男": [
+          "zh-CN-YunjianNeural",
+          "zh-CN-YunxiNeural",
+          "zh-CN-YunxiaNeural",
+          "zh-CN-YunyangNeural"
+        ],
+        "女": [
+          "zh-CN-XiaoyiNeural"
+        ]
+      },
+      "中年": {
+        "男": [
+          "zh-CN-YunjianNeural",
+          "zh-CN-YunxiNeural",
+          "zh-CN-YunyangNeural"
+        ],
+        "女": [
+          "zh-CN-XiaoxuanNeural",
+          "zh-CN-XiaoyiNeural"
+        ]
+      },
+      "老年": {
+        "男": [
+          "zh-CN-YunjianNeural",
+          "zh-CN-YunyangNeural"
+        ],
+        "女": [
+          "zh-CN-XiaoxuanNeural"
+        ]
+      },
+      "_totals": {
+        "男": 4,
+        "女": 2
+      }
+    },
+    "with_narrator": {
+      "少年": {
+        "男": [
+          "zh-CN-YunxiNeural",
+          "zh-CN-YunxiaNeural"
+        ],
+        "女": [
+          "zh-CN-XiaoyiNeural"
+        ]
+      },
+      "青年": {
+        "男": [
+          "zh-CN-YunjianNeural",
+          "zh-CN-YunxiNeural",
+          "zh-CN-YunxiaNeural",
+          "zh-CN-YunyangNeural"
+        ],
+        "女": [
+          "zh-CN-XiaoxiaoNeural",
+          "zh-CN-XiaoyiNeural"
+        ]
+      },
+      "中年": {
+        "男": [
+          "zh-CN-YunjianNeural",
+          "zh-CN-YunxiNeural",
+          "zh-CN-YunyangNeural"
+        ],
+        "女": [
+          "zh-CN-XiaoxiaoNeural",
+          "zh-CN-XiaoxuanNeural",
+          "zh-CN-XiaoyiNeural"
+        ]
+      },
+      "老年": {
+        "男": [
+          "zh-CN-YunjianNeural",
+          "zh-CN-YunyangNeural"
+        ],
+        "女": [
+          "zh-CN-XiaoxuanNeural"
+        ]
+      }
+    },
+    "accented": {
+      "东北": {
+        "男": [],
+        "女": [
+          "zh-CN-liaoning-XiaobeiNeural"
+        ]
+      },
+      "台湾腔": {
+        "男": [
+          "zh-TW-YunJheNeural"
+        ],
+        "女": [
+          "zh-TW-HsiaoChenNeural",
+          "zh-TW-HsiaoYuNeural"
+        ]
+      },
+      "粤语": {
+        "男": [
+          "zh-HK-WanLungNeural"
+        ],
+        "女": [
+          "zh-HK-HiuGaaiNeural",
+          "zh-HK-HiuMaanNeural"
+        ]
+      },
+      "陕西": {
+        "男": [],
+        "女": [
+          "zh-CN-shaanxi-XiaoniNeural"
+        ]
+      }
+    }
+  },
+  "fallbacks": {
+    "zh-CN-XiaoshuangNeural": {
+      "voice": "zh-CN-XiaoyiNeural",
+      "rate": "+2%",
+      "pitch": "+10Hz",
+      "volume": "+0%",
+      "note": "女少年近似：Xiaoyi 抬音高，非原生少年嗓"
+    },
+    "zh-CN-YunyeNeural": {
+      "voice": "zh-CN-YunjianNeural",
+      "rate": "-4%",
+      "pitch": "-2Hz",
+      "volume": "+0%",
+      "note": "男老年近似：Yunjian 再降速降调；老年阶段偏移会再叠加"
+    }
+  }
+}

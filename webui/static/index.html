@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>novel-forge 控制台</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">NF</span>
+    <div>
+      <h1>novel-forge 控制台</h1>
+      <p class="sub">txt → 剧本 → 分角色音频 → M4B / SRT</p>
+    </div>
+  </div>
+  <div class="health" id="health">检测环境中…</div>
+</header>
+
+<main>
+  <section class="card" id="librarySection">
+    <div class="card-head">
+      <h2>书库</h2>
+      <button class="ghost" onclick="loadBooks()">刷新</button>
+    </div>
+    <div id="dropzone" class="dropzone">
+      <p><strong>把 .txt 拖到这里</strong>，或点击选择文件</p>
+      <p class="hint">自动识别 UTF-8 / GBK(GB18030)，导入后自动分章</p>
+      <input type="file" id="fileInput" accept=".txt,text/plain" hidden>
+    </div>
+    <div class="row gap">
+      <input id="pathInput" class="text" placeholder="或输入本机 txt 绝对路径，例如 D:\books\novel.txt">
+      <button class="ghost" onclick="importPath()">按路径导入</button>
+    </div>
+    <div id="books" class="book-grid"></div>
+  </section>
+
+  <section class="card" id="chapterSection" hidden>
+    <div class="card-head">
+      <h2 id="bookTitle">章节</h2>
+      <div class="row gap">
+        <button class="ghost" onclick="setSelection('all')">全选</button>
+        <button class="ghost" onclick="setSelection('none')">清空</button>
+        <button class="ghost" onclick="setSelection('invert')">反选</button>
+      </div>
+    </div>
+    <div class="stats" id="bookStats"></div>
+    <div class="table-wrap">
+      <table class="table" id="chapterTable">
+        <thead><tr><th class="w-check">选</th><th class="w-idx">#</th><th>标题（可直接编辑）</th><th class="w-num">字数</th><th class="w-num">预估时长</th></tr></thead>
+        <tbody id="chapterBody"></tbody>
+      </table>
+    </div>
+    <div class="row between">
+      <span class="hint" id="chapterRange"></span>
+      <div class="row gap">
+        <button class="ghost" id="prevPage" onclick="changePage(-1)">上一页</button>
+        <button class="ghost" id="nextPage" onclick="changePage(1)">下一页</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="card" id="castSection" hidden>
+    <div class="card-head">
+      <h2>角色与音色</h2>
+      <span class="hint">修改会写回 voices/registry.json（跨书共用）</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table" id="castTable">
+        <thead><tr><th>角色</th><th class="w-gender">性别</th><th class="w-stage">年龄阶段</th><th class="w-temp">性格</th><th class="w-voice">edge 声线</th><th class="w-pros">语速</th><th class="w-pros">音高</th><th class="w-pros">音量</th><th class="w-pros">生效（平静）</th><th>依据</th><th class="w-voice2">A/B 备选</th><th class="w-act">操作</th></tr></thead>
+        <tbody id="castBody"></tbody>
+      </table>
+    </div>
+    <div class="hint" style="padding:8px 4px 0">最终值经夹紧/加权：persona 为基础值，emotion 按情绪强度加权，direction 只做微调；rate/pitch/volume 超出范围自动夹紧。表中“生效”为平静情绪下的参考值。</div>
+    <div class="row gap" style="margin-top:10px">
+      <label class="check"><input type="checkbox" id="realAgeInput"> 本书按真实年龄换声（默认关闭，18 岁仍用少年声线）</label>
+      <select id="copySourceSelect" class="num"><option value="">选择来源书…</option></select>
+      <button class="ghost" id="copyCastBtn">从其他书复制角色配置</button>
+      <label class="check">TTS 并发 <input type="number" id="ttsConcurrencyInput" class="num" min="1" max="2" step="1" style="width:56px"></label>
+      <label class="check">请求间隔(秒) <input type="number" id="ttsIntervalInput" class="num" min="0" step="0.5" style="width:70px"></label>
+      <button class="ghost" id="saveTtsBtn">保存本书 TTS</button>
+      <span class="hint" id="ttsHint"></span>
+      <span class="hint" id="collisionHint"></span>
+    </div>
+    <div class="row gap">
+      <audio id="previewAudio" controls preload="none"></audio>
+      <span class="hint" id="previewHint"></span>
+    </div>
+    <details class="changes">
+      <summary>换音色历史</summary>
+      <div id="changeList" class="change-list"></div>
+    </details>
+  </section>
+
+  <section class="card" id="settingsSection" hidden>
+    <div class="card-head">
+      <h2>导演层与停顿模板</h2>
+      <span class="hint">保存在 SQLite，不改 config.yaml；下一次任务生效</span>
+    </div>
+    <div class="settings">
+      <div class="row gap">
+        <label class="check"><input type="checkbox" id="directorInput"> 启用 LLM 导演层（每章一次）</label>
+        <span class="hint" id="directorEstimate">预计送审 —</span>
+      </div>
+      <div class="pause-grid">
+        <label>章首 <input type="number" id="pause_chapter_start_ms" min="0" max="5000" step="50"> ms</label>
+        <label>旁白→对白 <input type="number" id="pause_narration_to_dialogue_ms" min="0" max="5000" step="50"> ms</label>
+        <label>对白→旁白 <input type="number" id="pause_dialogue_to_narration_ms" min="0" max="5000" step="50"> ms</label>
+        <label>段间 <input type="number" id="pause_segment_gap_ms" min="0" max="5000" step="50"> ms</label>
+        <label>章末 <input type="number" id="pause_chapter_end_ms" min="0" max="5000" step="50"> ms</label>
+      </div>
+      <button class="primary" onclick="saveSettings()">保存设置</button>
+    </div>
+  </section>
+
+  <section class="card" id="segmentSection" hidden>
+    <div class="card-head">
+      <h2>单段即时试听</h2>
+      <span class="hint">用已存剧本的导演指令 + 当前角色参数，不整章重跑</span>
+    </div>
+    <div class="row gap">
+      <label class="hint">章序号 <input type="number" id="segChapter" class="num" min="1" value="1"></label>
+      <button class="ghost" onclick="loadSegments()">加载分段</button>
+      <span class="hint" id="segHint"></span>
+    </div>
+    <div class="table-wrap">
+      <table class="table" id="segmentTable">
+        <thead><tr><th class="w-idx">#</th><th class="w-kind">类型</th><th class="w-speaker">角色</th><th class="w-emotion">情绪</th><th class="w-status">状态</th><th>文本</th><th class="w-act">操作</th></tr></thead>
+        <tbody id="segmentBody"></tbody>
+      </table>
+    </div>
+    <div class="row gap">
+      <audio id="segmentAudio" controls preload="none"></audio>
+      <span class="hint" id="segmentPreviewHint"></span>
+    </div>
+  </section>
+
+  <section class="card" id="taskSection" hidden>
+    <div class="card-head">
+      <h2>合成任务</h2>
+      <div class="row gap">
+        <label class="check"><input type="checkbox" id="forceInput"> 忽略缓存重跑</label>
+        <label class="check"><input type="checkbox" id="singleVoiceInput"> 全章同音色对照</label>
+        <button class="primary" onclick="createTask()">开始合成所选章节</button>
+      </div>
+    </div>
+    <div id="taskList" class="task-list"></div>
+  </section>
+
+  <section class="card" id="outputSection" hidden>
+    <div class="card-head">
+      <h2>成品</h2>
+      <button class="ghost" onclick="loadOutputs()">刷新</button>
+    </div>
+    <div id="outputList" class="output-list"></div>
+  </section>
+</main>
+
+<footer class="footer">
+  <span>仅监听 127.0.0.1 ｜ SQLite: data/forge.db ｜ 旁白固定 Xiaoxiao</span>
+</footer>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

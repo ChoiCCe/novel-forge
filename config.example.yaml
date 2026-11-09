@@ -1,0 +1,672 @@
+# novel-forge V1 配置
+# 所有相对路径均相对于本文件所在目录（novel-forge/）
+
+paths:
+  env_file: ".env"             # 密钥只从仓库根目录的 .env 读取，不落源码
+  cache: "cache"               # LLM 剧本缓存 / 音频缓存 / 音色缓存
+  novels: "novels"             # 每本书的 raw / scripts / audio / output
+  voices: "voices"             # 跨书复用的音色注册表与参考音频
+  outputs: "outputs"
+
+llm:
+  base_url: "https://open.bigmodel.cn/api/paas/v4"
+  # 多供应商：按 provider_order 拼候选表。
+  # 密钥只从根目录 .env 读取（ZHIPU_API_KEY），不写日志。
+  # 2026-11-06：硅基流动整账户 402 account balance is insufficient，
+  # 所有模型不可用，已从 provider_order / providers / model_chain 全部移除，
+  # 不留任何会命中 402 的默认路径。需要恢复时再显式加回。
+  provider_order:
+    - "zhipu"
+  providers:
+    zhipu:
+      enabled: true
+      base_url: "https://open.bigmodel.cn/api/paas/v4"
+      base_url_env: "ZHIPU_BASE_URL"
+      api_key_env: "ZHIPU_API_KEY"
+      models:
+        - "glm-4.5-flash"
+      model_weight:
+        "glm-4.5-flash": 1.00
+  # 静态列表只作“并列时次序”，不直接决定首选：运行时按 成功率 × 质量权重 / 延迟 动态重排。
+  # 2026-11-06 实测（智谱）：
+  #   glm-4-flash    5/5 成功，0.74–1.12s；泛称区分差，只做初筛
+  #   glm-4.5-flash  5/5 成功，2.6–28.6s；必须 thinking=disabled，质量兜底
+  #   glm-4.7-flash  持续 429“访问量过大”，不再作为链首
+  model_chain:
+    - "glm-4.5-flash"
+  # 思考模型：reasoning_content 很长，单块可能远超 45s；只有 allow_thinking=true 才参与路由。
+  # glm-4.5-flash 本身是思考型，但这里不列入：列入会被 allow_thinking=false 过滤掉；
+  # 请求时由 disable_thinking 显式带 {"thinking":{"type":"disabled"}}。
+  # 旧硅基思考模型（R1 / GLM-Z1）已随硅基通道一起移除。
+  thinking_models: []
+  # 质量权重：只影响动态排序里的“分数”，不参与成功率统计
+  model_weight:
+    "glm-4.5-flash": 1.00
+  api_key_env: "ZHIPU_API_KEY"   # 旧字段：仅在未配置 providers 时兜底
+  base_url_env: "ZHIPU_BASE_URL"
+  timeout_s: 45                 # 单次请求硬超时；宁快速失败换模型，不卡整章
+  max_retries: 1                # 只对超时/5xx/连接错误额外重试 1 次；429 直接换模型
+  concurrency: 1                # 兼容旧字段，实际以 scheduler.concurrency 为准
+  # LLM 统一调度器（与 TTS 调度器完全分开，不复用限流器）
+  scheduler:
+    concurrency: 1              # 全局并发；硬上限 1，配置更大也会被夹紧
+    max_concurrency: 1          # 上限声明；用于说明“不允许调大”
+    per_model_concurrency: 1    # 单模型并发
+    min_interval_s: 1.0         # 相邻请求最小间隔（跨供应商共享同一节奏）
+  disable_thinking: true        # 非思考模型请求带 thinking=disabled；思考模型见 thinking_models
+  response_format_json: true    # 优先请求 json_object，失败自动退回纯提示词
+  # 路由与配额控制（智谱/硅基按模型限流，禁止同模型猛重试）
+  routing:
+    model_attempts: 1           # JSON/schema 不合法时，同一模型最多尝试几次（1=直接换）
+    max_total_s: 105            # 单块总预算 ≈ 2 次 45s 超时；超过即判链路失败
+    allow_thinking: false       # 只有置 true 时 R1/GLM-Z1 才进入候选
+    cool_down:
+      failures: 3               # 连续失败 N 次进入冷却
+      seconds: 600              # 普通失败冷却 10 分钟
+      rate_limit_seconds: 60    # 429 冷却 1 分钟，期间跳过该模型
+    backoff:
+      base_s: 1.5               # 重试退避底数（仅超时/5xx/连接）
+      max_s: 20
+    probe:
+      on_start: true            # 首次调用前做一次轻量探活，按真实延迟排序
+      ttl_s: 300                # 探活结果有效期；过期后重新探
+      sample_timeout_s: 8       # 探活单模型超时（不占用业务 45s 预算）
+  # 阶段级模型偏好：留空 = 跟随动态路由；失败仍按健康度顺序转移
+  repair_model: ""             # 缺口补写，例如 "THUDM/GLM-4-9B-0414"
+  review_model: ""             # 整章校对，例如 "THUDM/GLM-4-9B-0414"
+  # v4 强制结构化输出：能传 schema 的调用优先 json_schema，模型不支持再退 json_object
+  structured_output:
+    enabled: true
+    prefer_schema: true        # false 时只发 json_object
+    validate: true             # 客户端做 schema 校验，失败按“本模型失败”切换链路
+
+ingest:
+  heading_pattern: "^(第[0-9零〇一二两三四五六七八九十百千]+章|楔子|序章|前言|后记)[\\s　]*(.*)$"
+  drop_line_patterns:
+    - "https?://"
+    - "www\\."
+    - "知轩藏书"
+    - "更多精校小说"
+    - "最新章节"
+    - "请收藏"
+    - "手机阅读"
+    - "txt下载"
+    - "百度搜索"
+    - "顶点小说"
+  min_chapter_chars: 200       # 过短的“章节”视为误匹配，并入下一章
+
+script:
+  chunk_chars: 900             # 8B 模型稳定性优先，单块略小
+  narrator_name: "旁白"        # 旁白在剧本里的唯一 speaker 名；渲染层与写盘校验都以它为准
+  narrator_guard: "fix"        # 写盘前校验 type=narration 的 speaker：fix=强制改写，error=直接报错
+  max_segment_chars: 150       # 单段旁白上限，超出按标点拆分
+  context_segments: 3          # 传给 LLM 的最近上下文条数
+  proofread: true
+  proofread_payload_max_chars: 24000   # 超长章节跳过 LLM 校对，避免上下文溢出
+  prompt_version: "v1"
+  # 剧本质量门限（不许散落在代码里）
+  quality:
+    low_coverage_warn: 0.85
+    proofread_keep_dialogue: 0.80
+    proofread_ratio_slack: 0.01
+    proofread_precision_min: 0.90
+  # 导演层：每章独立调用一次，给每个 segment 输出 pace/emphasis/pause_after/volume
+  # 失败不拖垮整章：缺失 index 用 A 默认值兜底，解析失败重试一次后整章退回纯 A
+  director:
+    enabled: true
+    prompt_version: "d3"
+    pause_after_max_ms: 1200
+    # v3：只把有明显表演线索的段落送导演模型，其余直接用 A 的默认值，省 token。
+    # 阈值全部可配置，不硬编码在 if 里。
+    gating:
+      enabled: true
+      neutral_emotions: ["平静", "默认"]
+      punct_chars: "！？!?…"
+      short_sentence_chars: 8
+      dialogue_intensity_min: 0.55
+      emotion_intensity:
+        平静: 0.0
+        默认: 0.0
+        温和: 0.25
+        喜悦: 0.60
+        愤怒: 0.90
+        悲伤: 0.70
+        恐惧: 0.80
+        惊讶: 0.70
+        焦急: 0.85
+        讽刺: 0.50
+        冷漠: 0.30
+        威严: 0.60
+        无奈: 0.40
+        兴奋: 0.70
+  emotions:
+    - "平静"
+    - "温和"
+    - "喜悦"
+    - "愤怒"
+    - "悲伤"
+    - "恐惧"
+    - "惊讶"
+    - "焦急"
+    - "讽刺"
+    - "冷漠"
+    - "威严"
+    - "无奈"
+
+coverage:
+  threshold: 0.97            # 写盘硬门槛：不达标则该章失败，不合成音频
+  min_precision: 0.90        # 剧本内容里“原文之外”的比例上限（防止模型改写/扩写）
+  max_rounds: 2
+  max_gaps_per_round: 6
+  gap_max_chars: 400
+  min_gap_chars: 6
+  repair_accept_ratio: 0.85      # 补写块的覆盖率下限
+  repair_accept_precision: 0.75  # 补写块的精确率下限
+
+caster:
+  narration_engine: "edge"     # V1 方案：旁白与对白都用 edge-tts
+  dialogue_engine: "edge"
+  narrator_emotion: "平静"
+  # v3：旁白基准语速；v4 由 -4% 放慢到 -6%（同段时长应比 v3 长约 1.9%）
+  # 2026-11-05 听感定稿 C3：rate -12% / pitch -4Hz / volume +0%（旁白偏尖偏快已修正）
+  narrator_rate: "-12%"
+  narrator_pitch: "-4Hz"
+  narrator_volume: "+0%"
+
+tts:
+  sample_rate: 24000
+  channels: 1
+  retries: 2
+  max_segment_failures: 3        # 同一分段连续失败达到该次数后停止自动重试，由 WebUI 标注并可手动重试
+  sample_limits:
+    narration: 5               # 小样默认只合成前 5 段旁白；--full 关闭限制
+    dialogue: 3                # 小样默认只合成前 3 句对白
+  # v4 统一 TTS 调度器：所有 edge 请求都经 core/tts_scheduler.py
+  # 单书覆盖写在 voices/registry.json -> book_settings[book_id]:
+  #   tts_concurrency / tts_min_interval_s
+  scheduler:
+    enabled: true
+    concurrency: 2             # 默认 2 路并发
+    max_concurrency: 2         # 硬上限；实测 2 路可用后再考虑调大
+    min_interval_s: 3.0        # 相邻请求开始时间的最小间隔
+  narration_fallbacks: ["edge"]
+  dialogue_fallbacks: ["edge"]
+  # 情绪 -> edge-tts 韵律 delta（在角色 Persona 基础值上叠加）
+  # 注意：这只是韵律近似，不是真正的情感表演；edge 不支持 SSML express-as
+  # 补齐 {平静,温和,愤怒,悲伤,惊讶,讽刺,威严,无奈,恐惧,兴奋,冷漠}；
+  # 喜悦/焦急 为旧缓存剧本保留，避免历史分段丢失韵律
+  emotion_style:
+    平静: { rate: "+0%",  pitch: "+0Hz", volume: "+0%" }
+    温和: { rate: "-3%",  pitch: "+1Hz", volume: "+0%" }
+    愤怒: { rate: "+16%", pitch: "+4Hz", volume: "+9%" }
+    悲伤: { rate: "-12%", pitch: "-2Hz", volume: "-5%" }
+    惊讶: { rate: "+8%",  pitch: "+4Hz", volume: "+4%" }
+    讽刺: { rate: "-4%",  pitch: "-1Hz", volume: "+0%" }
+    威严: { rate: "-8%",  pitch: "-4Hz", volume: "+3%" }
+    无奈: { rate: "-6%",  pitch: "+0Hz", volume: "-2%" }
+    恐惧: { rate: "+8%",  pitch: "+2Hz", volume: "-6%" }
+    兴奋: { rate: "+10%", pitch: "+5Hz", volume: "+6%" }
+    冷漠: { rate: "-6%",  pitch: "-1Hz", volume: "-2%" }
+    喜悦: { rate: "+6%",  pitch: "+3Hz", volume: "+4%" }
+    焦急: { rate: "+14%", pitch: "+1Hz", volume: "+3%" }
+  # 参数精修（Persona / 长短句 / 子句切分 / 停顿模板）
+  lexicon: "lexicon.yaml"        # 多音字/专名替换表，可空；只影响合成，不改剧本原文
+  prosody:
+    short_sentence_chars: 8      # <= 该长度视为短促句
+    long_sentence_chars: 25      # > 该长度才做子句切分
+    clause_pause_ms: [120, 200]  # 子句间静音区间
+    emphasis_pause_ms: [80, 150] # 强调词前微停顿（近似，不是真重读）
+    emphasis_slow_pct: 4         # 强调所在子句额外放慢
+    # v3：最终参数硬夹紧范围；任何 Persona/情绪/导演叠加都不能越界。
+    rate_clamp: [-15, 24]
+    pitch_clamp: [-8, 8]
+    volume_clamp: [-10, 10]
+    # v3：加权融合。persona 是基础值，emotion 按情绪强度权重覆盖，direction 只做微调；
+    # 先软饱和到 (clamp-1) 以内，再硬夹紧兜底，避免长期顶在边界。
+    compose:
+      persona_weight: 1.0
+      direction_weight: 0.2
+      emotion_weight_default: 0.5
+      emotion_weight:
+        平静: 0.0
+        默认: 0.0
+        温和: 0.35
+        喜悦: 0.45
+        愤怒: 0.50
+        悲伤: 0.55
+        恐惧: 0.50
+        惊讶: 0.45
+        焦急: 0.50
+        讽刺: 0.40
+        冷漠: 0.40
+        威严: 0.55
+        无奈: 0.40
+        兴奋: 0.45
+      soft_limit_margin: 2.0
+      # 负向单独保留 v3 的 1.0 边距：rate 负向仍按 -14 饱和，不随正向放宽而变化
+      soft_limit_margin_negative: 1.0
+    # 性格 -> Persona 基础韵律；年龄段再叠一层偏移
+    temperament_map:
+      沉稳: { rate: "-4%", pitch: "-2Hz", volume: "+0%" }
+      急躁: { rate: "+8%", pitch: "+1Hz", volume: "+3%" }
+      阴柔: { rate: "-5%", pitch: "+3Hz", volume: "-3%" }
+      豪爽: { rate: "+5%", pitch: "+2Hz", volume: "+5%" }
+      阴沉: { rate: "-8%", pitch: "-4Hz", volume: "-2%" }
+      中性: { rate: "+0%", pitch: "+0Hz", volume: "+0%" }
+    age_offsets:
+      少年: { rate: "+3%",  pitch: "+6Hz", volume: "+0%" }
+      青年: { rate: "+0%",  pitch: "+0Hz", volume: "+0%" }
+      中年: { rate: "-2%",  pitch: "-1Hz", volume: "+0%" }
+      老年: { rate: "-7%",  pitch: "-5Hz", volume: "-2%" }
+    # 导演层 pace / volume 标签 -> 数值微调；compose 时再乘 direction_weight
+    direction_map:
+      pace:
+        slow:   { rate: -8.0, pitch: -1.0 }
+        normal: { rate: 0.0,  pitch: 0.0 }
+        fast:   { rate: 8.0,  pitch: 1.0 }
+        burst:  { rate: 16.0, pitch: 2.0 }
+      volume:
+        soft: -6.0
+        normal: 0.0
+        loud: 8.0
+    # 短促句 / 长句 的二次修正
+    emotion_variants:
+      short:
+        愤怒: { rate: "+6%", pitch: "+1Hz", volume: "+4%" }
+        惊讶: { rate: "+6%", pitch: "+2Hz", volume: "+3%" }
+      long:
+        悲伤: { rate: "-4%", pitch: "-1Hz", volume: "-2%" }
+        威严: { rate: "-2%", pitch: "-1Hz", volume: "+0%" }
+    # 停顿模板（postprocess 插静音，SRT 时间轴同步）
+    pause_template:
+      chapter_start_ms: 800
+      narration_to_dialogue_ms: 350
+      dialogue_to_narration_ms: 250
+      segment_gap_ms: 500
+      chapter_end_ms: 600
+  engines:
+    edge:
+      type: "edge"
+      enabled: true
+      placeholder: false        # V1 正式方案（旁白+对白），不是占位
+      # 旁白：女声青年音；跨章锁定，不允许回落到 Yunxi/Yunjian 男声
+      narrator_voice: "zh-CN-XiaoxiaoNeural"
+      narrator_voice_alt: "zh-CN-XiaoyiNeural"   # 备选，仅人工切换用
+      voice_map_version: "edge-v5"
+      # 年龄阶段 × 性别 -> 声线（旁白不在表内，固定 Xiaoxiao）
+      # 角色升阶段时会按这张表换声线，并写入 registry 的 voice_changes
+      age_stage_voice_map:
+        # 2026-11-04 审计：Xiaoshuang（女少年）/ Yunye（男老年）已返回 NoAudioReceived
+        # 女少年 -> Xiaoyi 抬音高（少年阶段 age_offsets 已有 +6Hz）
+        少年: { 男: "zh-CN-YunxiaNeural", 女: "zh-CN-XiaoyiNeural",   未知: "zh-CN-XiaoxiaoNeural" }
+        青年: { 男: "zh-CN-YunxiNeural",   女: "zh-CN-XiaoyiNeural",   未知: "zh-CN-XiaoxiaoNeural" }
+        中年: { 男: "zh-CN-YunyangNeural", 女: "zh-CN-XiaoxiaoNeural", 未知: "zh-CN-XiaoxiaoNeural" }
+        老年: { 男: "zh-CN-YunjianNeural", 女: "zh-CN-XiaoxuanNeural", 未知: "zh-CN-XiaoxiaoNeural" }
+      # 兼容旧映射（age_stage_voice_map 缺失时兜底）
+      voice_map:
+        少年: "zh-CN-YunxiaNeural"
+        男青年: "zh-CN-YunxiNeural"
+        男中年: "zh-CN-YunyangNeural"
+        男老年: "zh-CN-YunjianNeural"
+        女青年: "zh-CN-XiaoyiNeural"
+        女中年: "zh-CN-XiaoxiaoNeural"
+        女老年: "zh-CN-XiaoxuanNeural"
+        未知: "zh-CN-XiaoxiaoNeural"
+      # 方言/特殊口音：命中文案关键词时优先使用；gender 是该声线的性别，
+      # 角色性别不符时直接跳过（避免男角色拿到女声）
+      special:
+        东北: { voice: "zh-CN-liaoning-XiaobeiNeural", gender: "女" }
+        陕西: { voice: "zh-CN-shaanxi-XiaoniNeural",   gender: "女" }
+        西北: { voice: "zh-CN-shaanxi-XiaoniNeural",   gender: "女" }
+    sherpa:
+      type: "sherpa"
+      enabled: false           # 依赖与模型未就绪，见报告
+      model_dir: "models/sherpa-onnx-vits-zh"
+      num_threads: 2
+      sid: 0
+      speed: 1.0
+    kokoro:
+      type: "kokoro"
+      enabled: false           # 可选方案；本机未安装 kokoro 包
+      lang_code: "z"
+      repo_id: "hexgrad/Kokoro-82M"
+      default_voice: "zf_xiaobei"
+    cosyvoice:
+      type: "cosyvoice"
+      enabled: false           # 缺 torch 与 CosyVoice2-0.5B 权重，见报告
+      mode: "http"             # http | in_process
+      url: "http://127.0.0.1:15376/generate"
+      timeout_s: 600
+      refs_dir: "voices/refs"
+      in_process_model_dir: "third_party/Muliti-Role_Cosyvoice2/pretrained_models/CosyVoice2-0.5B"
+
+postprocess:
+  ffmpeg_path: ""              # 留空则依次尝试 imageio-ffmpeg / PATH
+  loudnorm: "I=-16:TP=-1.5:LRA=11"
+  loudnorm_two_pass: true      # 逐章两遍法：先 measure 再 apply
+  streaming: true              # 分段/章节拼接走 ffmpeg concat demuxer（常数内存）
+  pause_ms_narration: 120
+  pause_ms_dialogue: 200
+  pause_ms_between_chapters: 800
+
+export:
+  srt: true
+  m4b: true
+  m4b_bitrate: "64k"
+  mp3: true                    # 每章 MP3（ABS 可直接入库）
+  mp3_bitrate: "48k"
+  mp3_dir: "mp3"
+  book_m4b: false              # 书级汇总 M4B（可选）
+
+# 选角 / 声线目录配置
+casting:
+  version: 4
+
+  # 旁白：全局默认 + 可选单书覆盖
+  narrator:
+    default_voice: "zh-CN-XiaoxiaoNeural"
+    gender_preference: "female"        # female | male | auto
+    age_stage: "青年"                  # 旁白展示用年龄段，必须在 casting.age.stage_order 内
+    rate: "-12%"
+    pitch: "-4Hz"
+    volume: "+0%"
+    allow_book_override: true
+    # 定稿锁：tools/narrator_lock.py --lock 写入 fingerprint + locked_values。
+    # locked=true 时启动会校验 voice/rate/pitch/volume，改动即报错（--override-narrator-lock 可越过）。
+
+  # 声线阶梯（2026-11-05 四级定稿）：
+  #   1) 独立声线 + 独特参数（一对一声线）；
+  #   2) 声线池不够时，先复用某个“非旁白声线” + 不同参数；
+  #   3) 最后手段：旁白声线 + 不同参数；
+  #   4) 未知/不明确角色：旁白声线 + 独立参数档（见 casting.unknown_speaker）。
+  # 方言声线不参与上面的兜底链：只有角色证据授权时才能用（见 casting.dialect）。
+  # 任何时刻不允许两个角色（含旁白）使用完全相同的“声线+参数”组合，不足阈值自动拉开。
+    locked: false               # 副本默认不锁定；定稿后用 tools/narrator_lock.py --lock 写入
+    locked_values:
+      voice: "zh-CN-XiaoxiaoNeural"
+      rate: "-12%"
+      pitch: "-4Hz"
+      volume: "+0%"
+  voice_rules:
+    strategy: "independent_first"
+    # catalog=从 voices/catalog.edge.json 动态生成池；static=只用下面 voice_pools
+    pool_source: "catalog"
+    # 第二级：池耗尽后复用非旁白声线，而不是直接借旁白
+    reuse_non_narrator: true
+    # 静态表只作“优先顺序”，实际池以 catalog 中 available 且非 accented 的声线为准
+    voice_pools:
+      少年:
+        男: ["zh-CN-YunxiaNeural", "zh-CN-YunxiNeural"]
+        女: ["zh-CN-XiaoyiNeural"]
+        未知: []
+      青年:
+        男: ["zh-CN-YunxiNeural", "zh-CN-YunxiaNeural"]
+        女: ["zh-CN-XiaoyiNeural"]
+        未知: []
+      中年:
+        男: ["zh-CN-YunyangNeural", "zh-CN-YunjianNeural", "zh-CN-YunxiNeural"]
+        女: ["zh-CN-XiaoxuanNeural"]
+        未知: []
+      老年:
+        男: ["zh-CN-YunjianNeural", "zh-CN-YunyangNeural"]
+        女: ["zh-CN-XiaoxuanNeural"]
+        未知: []
+    # 参数区分阈值：至少一维达到下限，且归一化整体距离达标。
+    # 依据 tools/param_diff_probe.py 的实测结果（见 outputs/novel-forge/v5_param_diff）。
+    differentiate:
+      min_rate_pp: 4
+      min_pitch_hz: 4
+      min_volume_pct: 6
+      min_distance: 1.4
+      max_attempts: 120
+    # 同族近龄放宽（默认关闭）：只在“同一条 family 声线 + 年龄接近”时下调距离阈值，
+    # 不同 family / 年龄差大仍按上面的 1.4 严格判定，避免全局放宽放过真撞声。
+    # 依据：同族近龄角色（同班同学、同龄友人）本来就应该像同一代人，
+    # 语境（对话归属、称呼、叙事提示）足以区分；跨代角色才必须靠音色拉开。
+    # 曲线：年龄差 ≤ max_age_gap → relaxed_distance；max_age_gap..ramp_age_gap 线性回升；
+    #       > ramp_age_gap → 恢复 min_distance。阈值再被 floor_distance 兜底，
+    #       即两人参数完全相同（距离 0）或接近到 0.5 以下时，仍然判撞声。
+    same_family_relax:
+      enabled: false
+      same_voice_only: true      # 只认“同一条声线”，不按性别/年龄段猜
+      max_age_gap: 6             # 同辈：差 6 岁以内视为同龄人
+      ramp_age_gap: 12           # 差 6–12 岁线性回收到原阈值；>12 岁按跨代严格判定
+      relaxed_distance: 0.75     # 近龄同族允许的最小归一化距离
+      floor_distance: 0.50       # 绝对下限：任何放宽都不能低于它
+
+    # 阶段 A：共享池分档（默认关闭；阶段 0 只被分档报告读取，不影响绑定）
+    # main = 出场章数≥main_min_chapters 且（累计句数≥main_min_lines 或 字数占比≥main_min_share）
+    # shared 角色按 性别×年龄段 共用池；shared_scope=chapter 表示只在同章校验撞声
+    tiering:
+      enabled: false
+      main_min_chapters: 2
+      main_min_lines: 40
+      main_min_share: 0.08
+      shared_scope: "chapter"
+    # 阶段 D：懒绑定（默认关闭；首次进共享池，达标后在章边界升级独占）
+    lazy_binding:
+      enabled: false
+      promote_after_chapters: 3
+      promote_after_lines: 120
+      promote_after_share: 0.15
+      demote_after_idle: 6
+    # 阶段 B：dormant/租借（默认关闭；只作用于 family，overlay 不参与）
+    # 2026-11-05 定稿：N=5（下限 4），“连续 5 章没台词”不等于退场，长伏笔由 LLM 判定。
+    reclaim:
+      enabled: false
+      scope: "family"               # 只外借 family；overlay 永不参与
+      idle_chapters: 5              # dormant 门槛；长篇长伏笔留余量
+      idle_chapters_floor: 4        # 配置值不得低于 4
+      min_lines_keep: 20            # 双门禁之一：累计台词字数≥此值不 dormant
+      max_share: 0.05               # 双门禁之二：累计占比≥此值不 dormant
+      dormant_to_lent_after: 1      # dormant 满 N 章后可租借
+      lease_chapters: 20            # 租约章数
+      buyback_first: true           # 原主回归无条件优先，即使在租约期内
+      promotion:                    # 长期租用者转正（默认关闭，需人工审批）
+        enabled: false
+        min_leases: 3
+        min_active_chapters: 12
+        approval: "manual"
+        require_llm_status: "retired"
+        irreversible: true
+    # 三层声线：Identity / Voice Family / Rendition（2026-11-05，默认关闭）
+    family:
+      enabled: false
+      key_prefix: "family:"
+      anchor_by: "stage_chars"      # 取台词最多的 stage 作 family
+      anchor_tiebreak: "earliest"
+      legacy_mode: "readonly"       # 旧 lock:{cid}|{stage} 只读保留，供旧章复现
+      frontier: "last_rendered_chapter"
+    age_curve:
+      enabled: false
+      # 实测依据（outputs/novel-forge/v7_voice_age）：pitch 每降 1Hz，谱质心约降 7Hz；
+      # 降 11Hz 时质心 −6.5%，被听成“胖”。老年方向下压上限收到 −4Hz（质心 −0.8%）。
+      # 老年主要靠 语速 −10%、音量 −3%、极轻下压 近似；rate 权重同步下调。
+      anchors:
+        - {stage: "少年", age: 14, rate_pct: 3,   pitch_hz: 4,  volume_pct: 0}
+        - {stage: "青年", age: 26, rate_pct: 0,   pitch_hz: 0,  volume_pct: 0}
+        - {stage: "中年", age: 46, rate_pct: -4,  pitch_hz: -2, volume_pct: -1}
+        - {stage: "老年", age: 68, rate_pct: -10, pitch_hz: -4, volume_pct: -3}
+        - {stage: "高龄", age: 85, rate_pct: -12, pitch_hz: -4, volume_pct: -5}
+      max_pitch_per_chapter_hz: 0.5
+      max_rate_per_chapter_pp: 0.25
+      max_volume_per_chapter_pct: 0.2
+      jump_reasons: ["time_skip", "flashback_frame", "age_reveal"]
+      clamp: {rate_pct: [-25, 15], pitch_hz: [-4, 8], volume_pct: [-10, 10]}
+      timbre_bias:
+        register: {low: -1, mid: 0, high: 1}
+        texture:
+          hoarse: {rate_pct: -2, pitch_hz: -1}
+          warm: {rate_pct: 0, pitch_hz: 0}
+          bright: {rate_pct: 1, pitch_hz: 1}
+          clear: {rate_pct: 1, pitch_hz: 0}
+    overlay:
+      enabled: false
+      # 易容默认读者视角：保留本人 family，只叠 overlay，元数据标 disguised_as。
+      # “隐瞒身份”只能人工改绑（规则/人工权限），LLM 无权改 voice_id。
+      reader_perspective: "reader"
+      default_until: "chapter_end"
+      max_chapters: 60
+      clamp: {rate_pct: [-12, 12], pitch_hz: [-6, 6], volume_pct: [-10, 10]}
+      reasons: ["disguise", "impersonation", "possession", "injury", "whisper",
+                "shout", "drunk", "sick", "cry", "chorus", "nonhuman", "flashback_age"]
+    # 频率优先分配：不再先来先到；只在章边界抢占，main 既不抢也不被抢。
+    allocation:
+      enabled: false
+      w_all: 0.7                    # 累计占比 70%：全书重要度
+      w_recent: 0.3                 # 近 20 章占比 30%：当前戏份
+      recent_window_chapters: 20
+      preempt:
+        enabled: false
+        min_score_gap: 0.08         # 频率分绝对差 ≥ 8 个百分点
+        min_score_ratio: 1.5        # 且 challenger ≥ 1.5× incumbent
+        confirm_chapters: 2         # 连续 2 章超标才执行，防横跳
+        cooldown_chapters: 10       # 同一对角色 10 章内不重复抢
+        max_per_chapter: 2
+        exclude_tiers: ["main"]
+        demote_to: "shared"
+    # LLM 只判年龄轨迹与退场；输出里出现 voice_id/voice 即整条拒绝。
+    llm:
+      enabled: false
+      min_confidence: 0.60
+      auto_apply_confidence: 0.80
+      retry_with_errors: 1
+      fallback: "rule"
+      cache: true
+      max_chars: 6000
+    # 阶段 E：LLM 声线事件（默认关闭；LLM 只产事件，代码负责落地与约束）
+    # 打开后：抽取器每章产出事件 → 置信度闸门 → voice_events / pending_review；
+    # 仅 arc/persistent 的 swap_to 会写 binding 覆盖（带 prev 快照，可撤销）。
+    voice_events:
+      enabled: false
+      auto_apply_confidence: 0.85     # ≥ 此值自动生效
+      pending_review_confidence: 0.55 # ≥ 此值进人工复核；低于此值丢弃
+      chunk_chars: 1600               # 单块送审的字数上限
+      max_segments_per_chunk: 40      # 单块段数上限
+      prior_events_chapters: 3        # 前文事件摘要保留章数（不塞全文）
+      max_events_per_chapter: 12      # 每章最多接受的事件数
+      max_events_per_character: 1     # 同一角色每章最多生效 1 条（保守）
+      allow_swap_to: true             # 允许换声线类事件（false 时只保留参数级）
+      allow_soft_mod: true            # 允许参数级微调
+      allow_arc_scope: true           # 允许跨章作用域（false 时降级为 chapter）
+      allow_gender_swap: true         # 允许异性声线（女扮男装等）
+      prompt_version: "e1"
+      params:
+        max_rate_pct: 25
+        max_pitch_hz: 12
+        max_volume_pct: 15
+    # 兼容旧策略：仅当 strategy 缺失时读取
+    narrator_voice_policy: "differentiate"
+    forbid_narrator_voice: true
+    # forbid 策略下命中冲突时的替代声线，按顺序挑第一条性别兼容且不等于旁白的
+    narrator_alternates:
+      - "zh-CN-XiaoyiNeural"
+      - "zh-CN-XiaoxuanNeural"
+      - "zh-CN-YunxiNeural"
+      - "zh-CN-YunyangNeural"
+
+  # 剧本里没有角色档案的说话人：旁白声线 + 独立参数档（与旁白拉开阈值）
+  unknown_speaker:
+    rate: "-2%"
+    pitch: "-2Hz"
+    volume: "+0%"
+    max_variants: 8
+
+  # 方言/口音声线：必须先有角色证据，绝不作为主池耗尽后的兜底。
+  # 证据来源：原文明确写出籍贯/方言特征、角色档案 dialect/region（LLM 必须引用原文）、
+  # 或用户在 UI 手动指定。证据缺失或置信度不足一律按“无证据”处理。
+  dialect:
+    enabled: true
+    min_confidence: 0.60
+    # 这些 locale 下的声线一律标记为 accented，默认不进主池
+    accented_locales: ["zh-TW", "zh-HK", "zh-CN-liaoning", "zh-CN-shaanxi"]
+    keywords:
+      台湾腔:
+        strong: ["台湾腔", "台湾口音", "台普"]
+        weak: ["台北", "台湾"]
+      粤语:
+        strong: ["粤语", "广东话", "港式", "香港口音", "岭南口音", "粤人", "一口粤语"]
+        weak: ["香港", "广东", "岭南"]
+      东北:
+        strong: ["东北口音", "东北腔", "一口东北话", "关外口音"]
+        weak: ["东北", "关外"]
+      陕西:
+        strong: ["陕西口音", "西北口音", "秦腔", "关中口音"]
+        weak: ["陕西", "关中", "西北"]
+
+  gender:
+    auto_confirm: 0.85
+    review: 0.60
+    min_gap: 0.20
+    llm_confidence_cap: 0.70
+    llm_default_confidence: 0.60
+    unknown_confidence: 0.20
+    unknown_voice: "zh-CN-XiaoxiaoNeural"
+    unknown_male_evidence: 0.35
+    allow_auto_change_after_confirm: false
+    weight:
+      llm: 0.55
+      pronoun: 0.05            # 每次，最多 5 次
+      pronoun_max: 0.25
+      title: 0.20
+      self_reference: 0.10
+      name_hint: 0.10
+      conflict_penalty: 0.20
+
+  # 年龄与成长（§6.2 / §6.3 / §6.4）
+  age:
+    stage_order: ["少年", "青年", "中年", "老年"]
+    default_stage: "中年"
+    bands:
+      少年: [0, 17]
+      青年: [18, 34]
+      中年: [35, 54]
+      老年: [55, 120]
+    advance_min_age:
+      少年: 20
+      青年: 37
+      中年: 57
+    auto_apply_confidence: 0.75
+    confirm_below: 0.85
+    evidence_default_confidence: 0.50
+    flashback_confidence_factor: 0.50
+    evidence_log_cap: 12
+    unknown_age_default: 30          # 人物没写年龄时的分档默认值
+    consecutive_evidence: 2
+    cooldown_chapters: 3
+    max_jumps_per_chapter: 1
+    flashback_keywords: ["回忆", "当年", "十年前", "那时", "幼时"]
+    transition:
+      mode: "auto"                     # auto | drift | switch
+      chapters: 2
+      switch_landing: 0.5
+    # 本书按真实年龄：true 时 18 岁立即进青年，不再走 20 岁缓冲线
+    use_real_age: false
+
+  # 覆盖与一致性（§5 / §6.5）
+  consistency:
+    generic_names: ["同学", "随从", "路人", "士兵", "一个孩子", "大的孩子",
+                    "掌柜", "小二", "宫女", "侍卫", "家丁", "宾客", "学生"]
+    generic_scope: "book"
+    drift_action: "warn"               # warn | ignore | apply
+    cross_book_conflict: "global_wins" # global_wins | book_wins | ask
+    collision:
+      hint_score: 0.5
+      warn_score: 1.0
+      block_auto_score: 2.0
+      narrator_overlap_score: 1.0
+      allow_group_exemption: true
+    role_weight:
+      main_min_lines: 80
+      support_min_lines: 10
+      weights: { main: 1.0, support: 0.5, minor: 0.2, generic: 0.1 }
+
+  # 声线目录与可用性
+  catalog:
+    path: "voices/catalog.edge.json"
+    probe_on_start: "cached"          # cached | always | never
+    cache_ttl_days: 7
+    unavailable_action: "temporary_fallback"   # 运行时替代，不改 registry
+    fallbacks:
+      "zh-CN-XiaoshuangNeural": "zh-CN-XiaoyiNeural"
+      "zh-CN-YunyeNeural": "zh-CN-YunjianNeural"

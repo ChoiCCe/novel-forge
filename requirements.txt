@@ -1,0 +1,11 @@
+# novel-forge V1 最小依赖
+openai>=1.40
+PyYAML>=6
+edge-tts>=7
+imageio-ffmpeg>=0.5
+requests>=2.31
+
+# 可选旁白引擎（按需安装，默认不启用）
+# sherpa-onnx==2.0.1
+# kokoro
+# torch torchaudio
