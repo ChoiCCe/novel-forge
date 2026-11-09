@@ -102,4 +102,4 @@ python -m unittest discover -s tests
 
 ## License
 
-MIT，见 [LICENSE](LICENSE)。
+PolyForm Noncommercial License 1.0.0，见 [LICENSE](LICENSE)。个人学习、研究、非营利用途可免费使用；任何商业用途需另行授权。
