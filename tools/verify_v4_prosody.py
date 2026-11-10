@@ -63,14 +63,11 @@ def angry_check() -> dict:
         stage = {}
         for label, cfg_file in (("v3", "config.v3.bak.yaml"), ("v4", "config.yaml")):
             cfg = load_cfg(cfg_file)
-            # 导演层对愤怒短句通常给 burst；同时记录无导演值，便于对照设计里的两个口径
-            res = prosody.compose_prosody(profile, "愤怒", text, {"pace": "burst"}, cfg)
-            plain = prosody.compose_prosody(profile, "愤怒", text, None, cfg)
+            res = prosody.compose_prosody(profile, "愤怒", text, cfg)
             stage[label] = {
                 "profile_base": {k: profile.get(k) for k in ("rate", "pitch", "volume")},
-                "final_burst": res["formatted"],
-                "final_plain": plain["formatted"],
-                "raw_burst": {k: round(v, 2) for k, v in res["raw"].items()},
+                "final": res["formatted"],
+                "raw": {k: round(v, 2) for k, v in res["raw"].items()},
                 "weights": res["weights"],
                 "clamped": res["clamped"],
             }

@@ -48,9 +48,7 @@ class TTSJob:
     requested_engine: str
     engine: str
     voice: dict
-    direction: dict = field(default_factory=dict)
     speech_text: str = ""
-    pause_after_ms: int = 0
     clause_count: int = 1
     piece_count: int = 1
     degraded: bool = False
@@ -68,8 +66,7 @@ class TTSJob:
         return {
             "index": self.index, "type": self.type, "speaker": self.speaker,
             "speaker_key": self.speaker_key, "emotion": self.emotion, "text": self.text,
-            "speech_text": self.speech_text, "direction": self.direction,
-            "pause_after_ms": self.pause_after_ms, "clause_count": self.clause_count,
+            "speech_text": self.speech_text, "clause_count": self.clause_count,
             "piece_count": self.piece_count,
             "engine": self.engine, "requested_engine": self.requested_engine,
             "degraded": self.degraded, "cache_key": self.cache_key,
@@ -90,22 +87,18 @@ def voice_fingerprint(voice: dict) -> str:
 
 
 def cache_key(engine: str, voice: dict, text: str, salt: str = "") -> str:
-    """严格按“engine + 文本 hash + 音色 hash + 导演/切分盐”组合，避免串音色或旧参数误命中。"""
+    """严格按“engine + 文本 hash + 音色 hash + 切分盐”组合，避免串音色或旧参数误命中。"""
     payload = f"{engine}|{_sha(text)}|{voice_fingerprint(voice)}"
     if salt:
         payload += f"|{salt}"
     return _sha(payload)
 
 
-def direction_salt(direction: dict | None, cfg: dict) -> str:
-    """把导演指令与切分/停顿配置写进缓存盐：改强调或停顿也应重新合成。"""
-    direction = direction or prosody.default_direction()
+def prosody_salt(cfg: dict) -> str:
+    """把切分/停顿配置写进缓存盐：改停顿配置也应重新合成。"""
     pros = cfg["tts"].get("prosody", {})
     payload = {
-        "pace": direction.get("pace"), "emphasis": direction.get("emphasis"),
-        "pause_after_ms": direction.get("pause_after_ms"), "volume": direction.get("volume"),
         "long": pros.get("long_sentence_chars"), "clause": pros.get("clause_pause_ms"),
-        "emphasis_pause": pros.get("emphasis_pause_ms"), "slow": pros.get("emphasis_slow_pct"),
         "rate_clamp": pros.get("rate_clamp"),
         "synth": SYNTH_VERSION,
     }
@@ -182,8 +175,7 @@ def unknown_speaker_profile(cfg: dict, narrator: dict, speaker: str = "",
 
 
 def build_jobs(segments: list, cast_data: dict, chapter_index: int, chapter_title: str, cfg: dict,
-               registry: EngineRegistry, single_voice: bool = False,
-               directions: list[dict] | None = None) -> list[TTSJob]:
+               registry: EngineRegistry, single_voice: bool = False) -> list[TTSJob]:
     narrator = cast_data["narrator"]
     narrator_name = str(narrator.get("name") or "旁白")
     speakers = cast_data.get("speakers", {})
@@ -213,12 +205,9 @@ def build_jobs(segments: list, cast_data: dict, chapter_index: int, chapter_titl
         degraded = False
         if seg.type == "narration" and seg.speaker != narrator_name:
             narrator_speaker_mismatch.append(seg_index)
-        direction = (directions[seg_index] if directions and seg_index < len(directions)
-                     else prosody.default_direction())
         if single_voice:
             # 对照组：全章统一旁白声线，只保留情绪韵律
             profile, requested, fallbacks = narrator, narrator["engine"], narration_fb
-            direction = prosody.default_direction()
         elif seg.type == "dialogue":
             key = speakers.get(seg.speaker)
             profile = cast.get(key) if key else None
@@ -237,13 +226,13 @@ def build_jobs(segments: list, cast_data: dict, chapter_index: int, chapter_titl
         else:
             profile, requested, fallbacks = narrator, narrator["engine"], narration_fb
 
-        # Persona 基础 + 情绪（按强度权重）+ 导演（微调），v3 统一由 compose_prosody 合成
+        # Persona 基础 + 情绪（按强度权重），由 compose_prosody 合成
         voice = dict(profile)
-        voice.update(prosody.combine_voice(profile, seg.emotion, seg.text, direction, cfg))
+        voice.update(prosody.combine_voice(profile, seg.emotion, seg.text, cfg))
         speech_text = prosody.prepare_text(seg.text, cfg, registry.lexicon)
-        salt = direction_salt(direction, cfg)
+        salt = prosody_salt(cfg)
         clause_count = len(prosody.split_clauses(speech_text, cfg))
-        piece_count = len(prosody.plan_pieces(speech_text, direction, cfg))
+        piece_count = len(prosody.plan_pieces(speech_text, cfg))
 
         resolved, reason = registry.resolve(requested, fallbacks, voice)
         if resolved:
@@ -258,8 +247,7 @@ def build_jobs(segments: list, cast_data: dict, chapter_index: int, chapter_titl
             speaker_key=(narrator.get("key") or narrator_name) if seg.type == "narration"
             else profile.get("key", narrator_name),
             emotion=seg.emotion, text=seg.text,
-            direction=direction, speech_text=speech_text,
-            pause_after_ms=int(direction.get("pause_after_ms") or 0),
+            speech_text=speech_text,
             clause_count=clause_count, piece_count=piece_count,
             requested_engine=requested, engine=resolved, voice=voice, degraded=degraded,
             cache_key=cache_key(resolved, voice, speech_text, salt) if resolved else "",
@@ -275,16 +263,15 @@ def build_jobs(segments: list, cast_data: dict, chapter_index: int, chapter_titl
 
 def synthesize_job(engine, job: TTSJob, voice: dict, cfg: dict, dest: Path,
                     chapter_dir: Path) -> None:
-    """把一段文本按子句/强调词切分后分别合成，再按静音拼成单段音频。
+    """把一段文本按子句切分后分别合成，再按静音拼成单段音频。
 
-    子句间 120-200ms；强调词前 80-150ms 微停并让所在子句略放慢（近似，不是真重读）。
-    合成结果仍是一段音频，时长自然包含子段与静音，时间轴按整段累计。
+    子句间 120-200ms；合成结果仍是一段音频，时长自然包含子段与静音，时间轴按整段累计。
     """
     text = job.speech_text or job.text
-    pieces = prosody.plan_pieces(text, job.direction, cfg)
+    pieces = prosody.plan_pieces(text, cfg)
     job.piece_count = len(pieces)
     sample_rate = int(cfg["tts"]["sample_rate"])
-    if len(pieces) == 1 and not pieces[0]["rate_pct"]:
+    if len(pieces) == 1:
         engine.synthesize(pieces[0]["text"], voice, job.emotion, dest)
         trim_edge_silence(dest, sample_rate)
         return
@@ -292,14 +279,8 @@ def synthesize_job(engine, job: TTSJob, voice: dict, cfg: dict, dest: Path,
     pauses: list[int] = []
     try:
         for i, piece in enumerate(pieces):
-            piece_voice = dict(voice)
-            if piece["rate_pct"]:
-                base = prosody.parse_value(voice.get("rate", "+0%"), "%")
-                # 子句级的强调放慢也必须落在硬夹紧范围内
-                piece_rate = prosody.clamp_value(base + piece["rate_pct"], "rate", cfg)
-                piece_voice["rate"] = prosody.format_value(piece_rate, "%")
             part = chapter_dir / f".part_{job.index:04d}_{i:02d}.wav"
-            engine.synthesize(piece["text"], piece_voice, job.emotion, part)
+            engine.synthesize(piece["text"], voice, job.emotion, part)
             trim_edge_silence(part, sample_rate)
             parts.append(part)
             pauses.append(int(piece["pause_before_ms"]))
@@ -344,7 +325,7 @@ def _render_one(job: TTSJob, book_dir: Path, cfg: dict, registry: EngineRegistry
             last_error = reason
             continue
         key = (cache_key(engine_name, job.voice, job.speech_text or job.text,
-                         direction_salt(job.direction, cfg)) or job.cache_key)
+                         prosody_salt(cfg)) or job.cache_key)
         filename = f"{job.index:04d}_{job.type}_{engine_name}_{key[:8]}.wav"
         dest = chapter_dir / filename
         cached = cache_root / key[:2] / f"{key}.wav"

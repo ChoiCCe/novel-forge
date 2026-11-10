@@ -78,8 +78,8 @@ def build_jobs(seconds: int, segment_seconds: int, source: Path) -> list:
     count = max(1, seconds // segment_seconds)
     return [SimpleNamespace(
         index=i + 1, chapter_index=1, type="narration", text=f"第 {i + 1} 段用于内存压测",
-        speaker="旁白", emotion="平静", pause_after_ms=0, audio_path=str(source),
-        audio_tag="", direction={}, engine="edge", voice={},
+        speaker="旁白", emotion="平静", audio_path=str(source),
+        audio_tag="", engine="edge", voice={},
     ) for i in range(count)]
 
 

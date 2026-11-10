@@ -12,7 +12,7 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from core import (caster, dialect, director, narrator_lock, script, tts_router,  # noqa: E402
+from core import (caster, dialect, narrator_lock, script, tts_router,  # noqa: E402
                   voice_policy, voices_catalog)
 
 CFG = yaml.safe_load((ROOT / "config.yaml").read_text(encoding="utf-8"))
@@ -119,6 +119,13 @@ class ThresholdTest(unittest.TestCase):
 
 
 class NarratorLockTest(unittest.TestCase):
+    def test_shipped_config_is_locked_and_consistent(self):
+        state = narrator_lock.check(clone_cfg())
+        self.assertTrue(state["locked"])
+        self.assertFalse(state["diff"])
+        self.assertEqual(state["values"]["rate"], "-12%")
+        self.assertEqual(state["values"]["pitch"], "-4Hz")
+
     def test_unlocked_passes(self):
         cfg = clone_cfg()
         cfg["casting"]["narrator"]["locked"] = False
@@ -284,15 +291,13 @@ class LadderTest(unittest.TestCase):
 class LLMParamTest(unittest.TestCase):
     def test_schema_exposes_no_final_prosody_params(self):
         import json
-        payload = json.dumps([script.SEGMENTS_SCHEMA, director.DIRECTIONS_SCHEMA],
-                             ensure_ascii=False)
+        payload = json.dumps([script.SEGMENTS_SCHEMA], ensure_ascii=False)
         for key in ("rate", "pitch", "volume_pct", "hz"):
             self.assertNotIn(key, payload.lower())
         self.assertNotIn("最终参数", payload)
 
     def test_prompts_forbid_numeric_params(self):
         self.assertIn("禁止输出 rate/pitch/volume", script.SYSTEM_PROMPT)
-        self.assertIn("禁止输出 rate/pitch/volume", director.DIRECTOR_SYSTEM)
 
 
 if __name__ == "__main__":

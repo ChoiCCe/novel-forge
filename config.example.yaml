@@ -110,35 +110,6 @@ script:
     proofread_keep_dialogue: 0.80
     proofread_ratio_slack: 0.01
     proofread_precision_min: 0.90
-  # 导演层：每章独立调用一次，给每个 segment 输出 pace/emphasis/pause_after/volume
-  # 失败不拖垮整章：缺失 index 用 A 默认值兜底，解析失败重试一次后整章退回纯 A
-  director:
-    enabled: true
-    prompt_version: "d3"
-    pause_after_max_ms: 1200
-    # v3：只把有明显表演线索的段落送导演模型，其余直接用 A 的默认值，省 token。
-    # 阈值全部可配置，不硬编码在 if 里。
-    gating:
-      enabled: true
-      neutral_emotions: ["平静", "默认"]
-      punct_chars: "！？!?…"
-      short_sentence_chars: 8
-      dialogue_intensity_min: 0.55
-      emotion_intensity:
-        平静: 0.0
-        默认: 0.0
-        温和: 0.25
-        喜悦: 0.60
-        愤怒: 0.90
-        悲伤: 0.70
-        恐惧: 0.80
-        惊讶: 0.70
-        焦急: 0.85
-        讽刺: 0.50
-        冷漠: 0.30
-        威严: 0.60
-        无奈: 0.40
-        兴奋: 0.70
   emotions:
     - "平静"
     - "温和"
@@ -215,17 +186,14 @@ tts:
     short_sentence_chars: 8      # <= 该长度视为短促句
     long_sentence_chars: 25      # > 该长度才做子句切分
     clause_pause_ms: [120, 200]  # 子句间静音区间
-    emphasis_pause_ms: [80, 150] # 强调词前微停顿（近似，不是真重读）
-    emphasis_slow_pct: 4         # 强调所在子句额外放慢
-    # v3：最终参数硬夹紧范围；任何 Persona/情绪/导演叠加都不能越界。
+    # v3：最终参数硬夹紧范围；任何 Persona/情绪叠加都不能越界。
     rate_clamp: [-15, 24]
     pitch_clamp: [-8, 8]
     volume_clamp: [-10, 10]
-    # v3：加权融合。persona 是基础值，emotion 按情绪强度权重覆盖，direction 只做微调；
+    # v3：加权融合。persona 是基础值，emotion 按情绪强度权重覆盖；
     # 先软饱和到 (clamp-1) 以内，再硬夹紧兜底，避免长期顶在边界。
     compose:
       persona_weight: 1.0
-      direction_weight: 0.2
       emotion_weight_default: 0.5
       emotion_weight:
         平静: 0.0
@@ -258,17 +226,6 @@ tts:
       青年: { rate: "+0%",  pitch: "+0Hz", volume: "+0%" }
       中年: { rate: "-2%",  pitch: "-1Hz", volume: "+0%" }
       老年: { rate: "-7%",  pitch: "-5Hz", volume: "-2%" }
-    # 导演层 pace / volume 标签 -> 数值微调；compose 时再乘 direction_weight
-    direction_map:
-      pace:
-        slow:   { rate: -8.0, pitch: -1.0 }
-        normal: { rate: 0.0,  pitch: 0.0 }
-        fast:   { rate: 8.0,  pitch: 1.0 }
-        burst:  { rate: 16.0, pitch: 2.0 }
-      volume:
-        soft: -6.0
-        normal: 0.0
-        loud: 8.0
     # 短促句 / 长句 的二次修正
     emotion_variants:
       short:

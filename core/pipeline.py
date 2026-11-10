@@ -11,7 +11,7 @@ import logging
 import time
 from pathlib import Path
 
-from . import coverage, director, script, tts_router
+from . import coverage, script, tts_router
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -65,8 +65,7 @@ def _segments_from_dicts(items: list[dict]) -> list:
 
 
 def process_chapter(chapter, cfg: dict, llm, caster, known_names: list[str], force: bool,
-                    single_voice: bool = False, director_enabled: bool | None = None,
-                    force_director: bool = False, reuse_cast: bool = True, *, registry) -> dict:
+                    single_voice: bool = False, reuse_cast: bool = True, *, registry) -> dict:
     """生成单章剧本；任何环节失败都抛错（不做规则降级），由调用方标记章节失败。
 
     缓存命中默认只读（reuse_cast=True）：跳过 ensure_registered / refresh_cast /
@@ -85,6 +84,8 @@ def process_chapter(chapter, cfg: dict, llm, caster, known_names: list[str], for
                 caster.ensure_registered(cast_data)
                 cast_data = caster.refresh_cast(cast_data, chapter.index, chapter.book_id)  # 换引擎/换声线映射后仍用当前配置
             record = cached
+            # 旧快照里可能残留已移除的导演层结果，读入即丢弃，避免继续写回磁盘
+            record.pop("director", None)
             log.info("[%s] 命中剧本缓存（%s 段，覆盖率 %.2f%%）", chapter.title, len(segments), ratio * 100)
         else:
             log.warning("[%s] 剧本缓存覆盖率 %.2f%% 低于阈值 %.1f%%，重新生成",
@@ -168,35 +169,9 @@ def process_chapter(chapter, cfg: dict, llm, caster, known_names: list[str], for
     max_chars = int(cfg["script"].get("max_segment_chars", 150))
     tts_segments = [piece for seg in segments for piece in script.split_long(seg, max_chars)]
 
-    # 导演层：只送有明显表演线索的 segment（门控在 director.run_director 内），结果与剧本快照一起缓存
-    dir_conf = cfg["script"].get("director", {})
-    dir_version = str(dir_conf.get("prompt_version", "d1"))
-    dir_enabled = bool(dir_conf.get("enabled", True)) if director_enabled is None else bool(director_enabled)
-    existing = record.get("director") or {}
-    reuse = (not force and not force_director and bool(existing.get("enabled")) == dir_enabled
-             and existing.get("prompt_version") == dir_version
-             and len(existing.get("items") or []) == len(tts_segments))
-    if reuse:
-        dir_block = existing
-        log.info("[%s] 导演层命中快照：%s", chapter.title, dir_block.get("status"))
-    else:
-        dir_block = director.run_director(tts_segments, llm, cfg, chapter.title, enabled=dir_enabled)
-        dir_block["prompt_version"] = dir_version
-        record["director"] = dir_block
-        if dir_block.get("status") == "fallback":
-            # 导演层降级是临时失败，不写快照，避免把“纯参数模式”固化成后续缓存命中
-            log.warning("[%s] 导演层降级结果不写缓存，下次继续重试", chapter.title)
-        else:
-            _save_cached(cfg, text_hash, record)
-    directions = director.from_record(
-        record, len(tts_segments),
-        max_pause=int(cfg["script"]["director"]["pause_after_max_ms"]))
-
     jobs = tts_router.build_jobs(tts_segments, cast_data, chapter.index, chapter.title,
-                                 cfg, registry, single_voice=single_voice,
-                                 directions=directions)
-    return {"record": record, "segments": segments, "cast": cast_data, "jobs": jobs,
-            "director": dir_block}
+                                 cfg, registry, single_voice=single_voice)
+    return {"record": record, "segments": segments, "cast": cast_data, "jobs": jobs}
 
 
 def save_chapter_script(cfg: dict, chapter, record: dict, jobs: list, book_dir: Path) -> Path:

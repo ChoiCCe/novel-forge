@@ -229,7 +229,6 @@ def plan_jobs(jobs: list, cfg: dict) -> list[dict]:
     for i, job in enumerate(jobs):
         if i > 0:
             pause = transition_pause(jobs[i - 1].type, job.type, cfg)
-            pause += int(getattr(jobs[i - 1], "pause_after_ms", 0) or 0)
             cursor += pause
         duration_ms = wav_info(job.audio_path)["duration_ms"]
         timeline.append({
@@ -259,7 +258,6 @@ def concat_jobs_streaming(jobs: list, out_path: str | Path, cfg: dict) -> list[d
     for i, job in enumerate(jobs):
         if i > 0:
             pause = transition_pause(jobs[i - 1].type, job.type, cfg)
-            pause += int(getattr(jobs[i - 1], "pause_after_ms", 0) or 0)
             if pause > 0:
                 entries.append(_silence_cached(quiet_dir, pause, sample_rate, quiet_cache))
         entries.append(Path(job.audio_path))
@@ -273,8 +271,8 @@ def concat_jobs_streaming(jobs: list, out_path: str | Path, cfg: dict) -> list[d
 def concat_jobs(jobs: list, out_path: str | Path, cfg: dict) -> list[dict]:
     """按 job.index 顺序拼接已合成音频；返回每个 job 在成品里的时间轴。
 
-    停顿模板由 tts.prosody.pause_template 提供：章首/旁白↔对白/段间/章末，
-    再叠加导演层给出的 pause_after_ms；所有静音都计入 cursor，SRT 与音频不会错位。
+    停顿模板由 tts.prosody.pause_template 提供：章首/旁白↔对白/段间/章末；
+    所有静音都计入 cursor，SRT 与音频不会错位。
     """
     from .prosody import pause_template, transition_pause
 
@@ -296,7 +294,6 @@ def concat_jobs(jobs: list, out_path: str | Path, cfg: dict) -> list[dict]:
         for i, job in enumerate(jobs):
             if i > 0:
                 pause = transition_pause(jobs[i - 1].type, job.type, cfg)
-                pause += int(getattr(jobs[i - 1], "pause_after_ms", 0) or 0)
                 output.writeframes(_silence(sample_rate, pause))
                 cursor += pause
             frames = _frames(job.audio_path, sample_rate)

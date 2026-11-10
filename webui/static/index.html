@@ -30,7 +30,7 @@
       <input type="file" id="fileInput" accept=".txt,text/plain" hidden>
     </div>
     <div class="row gap">
-      <input id="pathInput" class="text" placeholder="或输入本机 txt 绝对路径，例如 D:\books\novel.txt">
+      <input id="pathInput" class="text" placeholder="或输入本机 txt 绝对路径，例如 d:\gupiao\novel\某书.txt">
       <button class="ghost" onclick="importPath()">按路径导入</button>
     </div>
     <div id="books" class="book-grid"></div>
@@ -72,7 +72,7 @@
         <tbody id="castBody"></tbody>
       </table>
     </div>
-    <div class="hint" style="padding:8px 4px 0">最终值经夹紧/加权：persona 为基础值，emotion 按情绪强度加权，direction 只做微调；rate/pitch/volume 超出范围自动夹紧。表中“生效”为平静情绪下的参考值。</div>
+    <div class="hint" style="padding:8px 4px 0">最终值经夹紧/加权：persona 为基础值，emotion 按情绪强度加权；rate/pitch/volume 超出范围自动夹紧。表中“生效”为平静情绪下的参考值。</div>
     <div class="row gap" style="margin-top:10px">
       <label class="check"><input type="checkbox" id="realAgeInput"> 本书按真实年龄换声（默认关闭，18 岁仍用少年声线）</label>
       <select id="copySourceSelect" class="num"><option value="">选择来源书…</option></select>
@@ -95,14 +95,10 @@
 
   <section class="card" id="settingsSection" hidden>
     <div class="card-head">
-      <h2>导演层与停顿模板</h2>
+      <h2>停顿模板</h2>
       <span class="hint">保存在 SQLite，不改 config.yaml；下一次任务生效</span>
     </div>
     <div class="settings">
-      <div class="row gap">
-        <label class="check"><input type="checkbox" id="directorInput"> 启用 LLM 导演层（每章一次）</label>
-        <span class="hint" id="directorEstimate">预计送审 —</span>
-      </div>
       <div class="pause-grid">
         <label>章首 <input type="number" id="pause_chapter_start_ms" min="0" max="5000" step="50"> ms</label>
         <label>旁白→对白 <input type="number" id="pause_narration_to_dialogue_ms" min="0" max="5000" step="50"> ms</label>
@@ -117,7 +113,7 @@
   <section class="card" id="segmentSection" hidden>
     <div class="card-head">
       <h2>单段即时试听</h2>
-      <span class="hint">用已存剧本的导演指令 + 当前角色参数，不整章重跑</span>
+      <span class="hint">用已存分段 + 当前角色参数，不整章重跑</span>
     </div>
     <div class="row gap">
       <label class="hint">章序号 <input type="number" id="segChapter" class="num" min="1" value="1"></label>

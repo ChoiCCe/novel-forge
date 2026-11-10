@@ -1,4 +1,4 @@
-"""韵律参数合成：Persona 基础 + 情绪 delta + 导演层 pace/volume。
+"""韵律参数合成：Persona 基础 + 情绪 delta。
 
 设计原则：
 - 只做数值计算，不碰引擎调用；TTS 路由与 WebUI 试听都复用这里的函数；
@@ -16,9 +16,6 @@ import yaml
 
 log = logging.getLogger("novel-forge.prosody")
 
-# 只保留标签词表；具体数值全部来自 config.yaml -> tts.prosody.direction_map
-PACES = ("slow", "normal", "fast", "burst")
-VOLUMES = ("soft", "normal", "loud")
 TEMPERAMENTS = ("沉稳", "急躁", "阴柔", "豪爽", "阴沉", "中性")
 
 _TEMPERAMENT_HINTS = (
@@ -156,11 +153,6 @@ def emotion_delta(emotion: str, text_len: int, cfg: dict) -> dict:
     return total
 
 
-def pace_delta(pace: str, cfg: dict) -> dict:
-    dmap = cfg["tts"]["prosody"]["direction_map"]["pace"]
-    return dict(dmap.get(pace) or dmap["normal"])
-
-
 def emotion_weight(emotion: str, cfg: dict) -> float:
     """情绪强度权重（0-1）：0 表示该情绪只作为标签、不改变 Persona 基础值。"""
     comp = cfg["tts"]["prosody"]["compose"]
@@ -168,39 +160,28 @@ def emotion_weight(emotion: str, cfg: dict) -> float:
     return max(0.0, min(1.0, float(weights.get(emotion, comp["emotion_weight_default"]))))
 
 
-def compose_prosody(profile: dict, emotion: str, text: str, direction: dict | None,
-                    cfg: dict) -> dict:
+def compose_prosody(profile: dict, emotion: str, text: str, cfg: dict) -> dict:
     """v3 最终韵律：加权融合 + 软饱和 + 硬夹紧。
 
-    raw = persona × w_persona + emotion_delta × w_emotion + direction_delta × w_direction
+    raw = persona × w_persona + emotion_delta × w_emotion
 
     与 v2 的区别：
     - v2 是四层直接相加，周律第 14 段落到 +37%/+12Hz/+12%，听感像喊；
     - v3 中 persona 仍是基础（权重 1.0），但情绪只按强度权重生效（愤怒 0.45），
-      导演的 pace/volume 只做 0.2 的微调，再经软饱和压到 (-15%, +15%) 开区间内，
-      最后硬夹紧兜底。因此同样一句愤怒短句不会冲到边界。
+      再经软饱和压到 (-15%, +15%) 开区间内，最后硬夹紧兜底。
     """
     comp = cfg["tts"].get("prosody", {}).get("compose") or {}
-    direction = direction or {}
     persona = {
         "rate": parse_value(profile.get("rate", "+0%"), "%"),
         "pitch": parse_value(profile.get("pitch", "+0Hz"), "Hz"),
         "volume": parse_value(profile.get("volume", "+0%"), "%"),
     }
     emo = emotion_delta(emotion, spoken_len(text), cfg)
-    pace = pace_delta(str(direction.get("pace") or "normal"), cfg)
-    volume_map = cfg["tts"]["prosody"]["direction_map"]["volume"]
-    direction_delta = {
-        "rate": pace["rate"],
-        "pitch": pace["pitch"],
-        "volume": float(volume_map[str(direction.get("volume") or "normal")]),
-    }
     persona_w = float(comp["persona_weight"])
-    direction_w = float(comp["direction_weight"])
     emo_w = emotion_weight(emotion, cfg)
 
     raw = {
-        kind: persona[kind] * persona_w + emo[kind] * emo_w + direction_delta[kind] * direction_w
+        kind: persona[kind] * persona_w + emo[kind] * emo_w
         for kind in ("rate", "pitch", "volume")
     }
     margin = max(0.0, float(comp["soft_limit_margin"]))
@@ -229,18 +210,16 @@ def compose_prosody(profile: dict, emotion: str, text: str, direction: dict | No
         "raw": raw,
         "soft": soft,
         "clamped": clamped,
-        "weights": {"persona": persona_w, "emotion": emo_w, "direction": direction_w},
+        "weights": {"persona": persona_w, "emotion": emo_w},
         "persona": persona,
         "emotion_delta": {kind: emo[kind] for kind in ("rate", "pitch", "volume")},
         "emotion_variant": emo["variant"],
-        "direction_delta": direction_delta,
     }
 
 
-def combine_voice(profile: dict, emotion: str, text: str, direction: dict | None,
-                  cfg: dict) -> dict:
+def combine_voice(profile: dict, emotion: str, text: str, cfg: dict) -> dict:
     """兼容旧调用：只返回格式化后的 rate/pitch/volume；计算全部走 compose_prosody。"""
-    return compose_prosody(profile, emotion, text, direction, cfg)["formatted"]
+    return compose_prosody(profile, emotion, text, cfg)["formatted"]
 
 
 # ---------------------------------------------------------------------------- 文本规整
@@ -364,83 +343,17 @@ def clause_pause_ms(boundary: int, count: int, cfg: dict) -> int:
     return int(round(low + (high - low) * ratio))
 
 
-def emphasis_pause_ms(pace: str, cfg: dict) -> int:
-    low, high = cfg["tts"].get("prosody", {}).get("emphasis_pause_ms", [80, 150])
-    low, high = int(low), int(high)
-    if pace == "burst":
-        return low
-    if pace == "slow":
-        return high
-    return int(round((low + high) / 2))
-
-
-def plan_pieces(text: str, direction: dict | None, cfg: dict) -> list[dict]:
-    """把一段文本拆成“最小合成单元”：子句 + 强调词边界。
-
-    返回 [{"text", "pause_before_ms", "rate_pct"}]。
-    edge 无法真正重读单词，这里只做“强调词前微停 + 所在子句略放慢”的近似。
-    """
-    direction = direction or {}
-    pace = str(direction.get("pace") or "normal")
-    emphasis = [str(word).strip() for word in (direction.get("emphasis") or []) if str(word).strip()]
-    slow_pct = float(cfg["tts"].get("prosody", {}).get("emphasis_slow_pct", 4))
+def plan_pieces(text: str, cfg: dict) -> list[dict]:
+    """把一段文本拆成“最小合成单元”（按子句），返回 [{"text", "pause_before_ms"}]。"""
     clauses = split_clauses(text, cfg)
     pieces: list[dict] = []
     for ci, clause in enumerate(clauses):
-        cuts = _emphasis_cuts(clause, emphasis)
-        boundaries = [0] + cuts + [len(clause)]
-        for bi in range(len(boundaries) - 1):
-            piece_text = clause[boundaries[bi]:boundaries[bi + 1]].strip()
-            if not piece_text:
-                continue
-            if bi == 0:
-                pause = 0 if ci == 0 else clause_pause_ms(ci, len(clauses), cfg)
-            else:
-                pause = emphasis_pause_ms(pace, cfg)
-            pieces.append({
-                "text": piece_text,
-                "pause_before_ms": int(pause),
-                "rate_pct": -slow_pct if cuts else 0.0,
-            })
-    # 强调词紧随开引号时，子切分会留下一个只有“ ‘ ”的无声片段，edge 会返回 No audio。
-    # 把纯标点片段并到下一个有内容的片段（或前一个），既保留原文又消掉空合成单元。
-    cleaned: list[dict] = []
-    pending_prefix = ""
-    for piece in pieces:
-        if not _has_speech(piece["text"]):
-            if cleaned:
-                cleaned[-1]["text"] += piece["text"]
-            else:
-                pending_prefix += piece["text"]
+        piece_text = clause.strip()
+        if not _has_speech(piece_text):
             continue
-        if pending_prefix:
-            piece["text"] = pending_prefix + piece["text"]
-            piece["pause_before_ms"] = 0
-            pending_prefix = ""
-        cleaned.append(piece)
-    if pending_prefix and cleaned:
-        cleaned[-1]["text"] += pending_prefix
-    pieces = cleaned
-    if not pieces:
-        return [{"text": text, "pause_before_ms": 0, "rate_pct": 0.0}]
-    return pieces
-
-
-def _emphasis_cuts(clause: str, emphasis: list[str]) -> list[int]:
-    """返回强调词起点（按出现顺序、去重），用于切分合成单元。"""
-    if not emphasis:
-        return []
-    hits: set[int] = set()
-    for word in emphasis:
-        start = 0
-        while True:
-            pos = clause.find(word, start)
-            if pos < 0:
-                break
-            if pos > 0:
-                hits.add(pos)
-            start = pos + len(word)
-    return sorted(hits)
+        pause = 0 if ci == 0 else clause_pause_ms(ci, len(clauses), cfg)
+        pieces.append({"text": piece_text, "pause_before_ms": int(pause)})
+    return pieces or [{"text": text, "pause_before_ms": 0}]
 
 
 # ---------------------------------------------------------------------------- 停顿模板
@@ -465,7 +378,3 @@ def transition_pause(prev_type: str, cur_type: str, cfg: dict) -> int:
     if prev_type == "dialogue" and cur_type == "narration":
         return template["dialogue_to_narration_ms"]
     return template["segment_gap_ms"]
-
-
-def default_direction() -> dict:
-    return {"pace": "normal", "emphasis": [], "pause_after_ms": 0, "volume": "normal"}

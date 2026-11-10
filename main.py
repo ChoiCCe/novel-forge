@@ -255,8 +255,6 @@ def main() -> None:
     parser.add_argument("--prune-audio", action="store_true", help="合成后删除本章旧 hash 的孤儿音频")
     parser.add_argument("--demo-tag", default="", help="demo 文件名后缀，避免覆盖，如 single")
     parser.add_argument("--audio-tag", default="", help="音频/字幕文件名后缀，如 v2（不覆盖旧成品）")
-    parser.add_argument("--no-director", action="store_true", help="关闭导演层，只用 A 参数")
-    parser.add_argument("--director-force", action="store_true", help="忽略导演层快照，重新调用一次")
     parser.add_argument("--override-narrator-lock", action="store_true",
                         help="旁白已锁定但配置被改动时，仍允许本次运行")
     parser.add_argument("--verbose", action="store_true")
@@ -350,8 +348,6 @@ def main() -> None:
                     "result": process_chapter(chapter, cfg, llm, caster, known_names,
                                               args.force or chapter.index in forced,
                                               args.single_voice,
-                                              director_enabled=False if args.no_director else None,
-                                              force_director=args.director_force,
                                               registry=registry)}
         except Exception as err:
             failures = getattr(err, "failures", [])
@@ -445,11 +441,6 @@ def main() -> None:
                 "segments": len(run["script"]["segments"]) if run.get("script") else 0,
                 "coverage": run["script"]["record"]["coverage"] if run.get("script") else {},
                 "jobs": len(run["script"]["jobs"]) if run.get("script") else 0,
-                "director": {
-                    key: run["script"]["director"].get(key)
-                    for key in ("enabled", "status", "covered", "sent", "total", "default_count",
-                                "attempts", "error", "dropped_emphasis")
-                } if run.get("script") and run["script"].get("director") else {},
                 "audio": run["audio"].get("stats", {}),
                 "wav": run["audio"].get("wav"),
                 "srt": run["audio"].get("srt"),
@@ -474,12 +465,6 @@ def main() -> None:
         print(f"[{chapter['index']}] {chapter['title']} | 片段 {chapter['segments']} | "
               f"覆盖率 {cov['final_ratio'] * 100:.2f}% | 音频 {chapter['audio']} | "
               f"{chapter['duration_ms'] / 1000:.1f}s")
-        d = chapter.get("director") or {}
-        if d:
-            dropped = d.get("dropped_emphasis") or []
-            print(f"    导演 {d.get('status')}：送审 {d.get('sent')}/{d.get('total')} 段"
-                  f"（默认 {d.get('default_count')} 段），覆盖 {d.get('covered')}，"
-                  f"丢弃强调词 {len(dropped)} 个")
     stats = llm.stats
     print(f"LLM JSON 解析成功 {stats['json_success']}/{stats['json_calls']}，链路失败 {stats['chain_failures']} 次")
     for model, entry in stats["models"].items():

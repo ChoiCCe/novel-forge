@@ -153,8 +153,6 @@ class TaskRunner:
         )
         force = bool(params.get("force"))
         single_voice = bool(params.get("single_voice"))
-        director_flag = params.get("director")
-        director_enabled = None if director_flag is None else bool(director_flag)
 
         # ---- 剧本
         self.db.update_task_chapter(task_id, idx, script_status="running", detail="生成剧本…",
@@ -162,7 +160,6 @@ class TaskRunner:
         try:
             result = process_chapter(chapter, self.cfg, self.llm, self.caster,
                                      known_names, force, single_voice,
-                                     director_enabled=director_enabled,
                                      registry=self.registry)
         except Exception as err:
             log.error("[%s] 剧本失败：%s", chapter.title, err)
@@ -188,9 +185,7 @@ class TaskRunner:
             task_id, idx, script_status="done", coverage_status="done",
             coverage_ratio=coverage.get("final_ratio"), tts_total=len(jobs),
             detail=f"剧本 {len(result['segments'])} 段 / {len(jobs)} 任务，覆盖率 "
-                   f"{coverage.get('final_ratio', 0) * 100:.2f}%"
-                   + (f"，导演 {result['director'].get('status')}"
-                      if result.get("director", {}).get("enabled") else "，导演关闭"))
+                   f"{coverage.get('final_ratio', 0) * 100:.2f}%")
         sync_cast(self.db, self.caster, book_id)
 
         # ---- 合成（限额 None = 全量）

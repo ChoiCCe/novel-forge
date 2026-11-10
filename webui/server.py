@@ -16,12 +16,11 @@ import urllib.parse
 import wave
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from types import SimpleNamespace
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from core import casting, director as director_mod, ingest, postprocess, prosody, tts_router, tts_scheduler  # noqa: E402
+from core import casting, ingest, postprocess, prosody, tts_router, tts_scheduler  # noqa: E402
 from core.caster import Caster  # noqa: E402
 from core.llm import LLMClient  # noqa: E402
 from webui.db import Database, now  # noqa: E402
@@ -36,8 +35,7 @@ def effective_view(app: "App", profile: dict, emotion: str | None = None) -> dic
     """角色编辑页展示的“生效参数”：与成品/试听共用同一套 compose_prosody。"""
     emotion = emotion or profile.get("default_emotion") or "平静"
     composed = prosody.compose_prosody(
-        profile, emotion, "这是一段用于展示最终参数的参考语句。",
-        prosody.default_direction(), app.cfg)
+        profile, emotion, "这是一段用于展示最终参数的参考语句。", app.cfg)
     return {
         "emotion": emotion,
         "rate": composed["formatted"]["rate"],
@@ -99,22 +97,13 @@ class App:
     # ---------------------------------------------------------------- 运行时设置
     def settings_view(self) -> dict:
         return {
-            "director": {
-                "enabled": bool(self.cfg["script"].get("director", {}).get("enabled", True)),
-                "prompt_version": self.cfg["script"].get("director", {}).get("prompt_version", "d1"),
-            },
             "pause_template": prosody.pause_template(self.cfg),
             "temperaments": list(prosody.TEMPERAMENTS),
-            "paces": list(prosody.PACES),
-            "volumes": list(prosody.VOLUMES),
             "emotions": list(self.cfg["tts"].get("emotion_style", {}).keys()),
         }
 
     def _apply_settings(self) -> None:
         """把 SQLite 里的界面设置叠加到运行时配置（不改 config.yaml）。"""
-        stored = self.db.setting("director_enabled", "")
-        if stored in ("0", "1"):
-            self.cfg.setdefault("script", {}).setdefault("director", {})["enabled"] = stored == "1"
         raw = self.db.setting("pause_template", "")
         if raw:
             try:
@@ -130,10 +119,6 @@ class App:
             current["pause_template"] = merged
 
     def save_settings(self, body: dict) -> dict:
-        if "director_enabled" in body:
-            enabled = bool(body["director_enabled"])
-            self.db.set_setting("director_enabled", "1" if enabled else "0")
-            self.cfg.setdefault("script", {}).setdefault("director", {})["enabled"] = enabled
         if isinstance(body.get("pause_template"), dict):
             allowed = {key: max(0, min(5000, int(value)))
                        for key, value in body["pause_template"].items()
@@ -416,9 +401,6 @@ class Handler(BaseHTTPRequestHandler):
                             "bindings": bindings,
                             "book_options": app.caster.book_options(book_id)})
                 return
-            if len(parts) == 4 and parts[3] == "director-estimate":
-                self._json({"ok": True, **self._director_estimate(app, book_id)})
-                return
             if len(parts) == 4 and parts[3] == "outputs":
                 self._json({"ok": True, "outputs": self._list_outputs(app, book_id)})
                 return
@@ -499,8 +481,6 @@ class Handler(BaseHTTPRequestHandler):
                 "force": bool(body.get("force")),
                 "single_voice": bool(body.get("single_voice")),
             }
-            if "director" in body:
-                params["director"] = bool(body.get("director"))
             task_id = app.db.create_task(book_id, rows, params)
             self._json({"ok": True, "task_id": task_id, "task": _task_view(app.db.task(task_id))})
             return
@@ -878,25 +858,6 @@ class Handler(BaseHTTPRequestHandler):
                 "collisions": app.caster.check_collisions(
                     {row["key"]: row for row in scoped})}
 
-    def _director_estimate(self, app: App, book_id: str) -> dict:
-        """预计送审段数：按当前门控阈值扫已选章节的已存分段（不调用模型）。"""
-        sent = total = 0
-        missing = 0
-        chapters = app.db.selected_chapters(book_id)
-        for chapter in chapters:
-            rows = app.db.segments(book_id, chapter["idx"], 1000)
-            if not rows:
-                missing += 1
-                continue
-            segments = [SimpleNamespace(type=row.get("type", ""), speaker=row.get("speaker", ""),
-                                        emotion=row.get("emotion", "平静"), text=row.get("text", ""))
-                        for row in rows]
-            est = director_mod.estimate(segments, app.cfg)
-            sent += est["sent"]
-            total += est["total"]
-        return {"sent": sent, "total": total, "default_count": total - sent,
-                "chapters": len(chapters), "missing_chapters": missing}
-
     def _import_book(self, app: App, target: Path, raw: bytes) -> str:
         encoding = _detect_encoding(raw)
         chapters = ingest.split_chapters(target, app.cfg["ingest"])
@@ -926,14 +887,13 @@ class Handler(BaseHTTPRequestHandler):
         text = text[:160]
         entry = app.caster.profile_by_key(key) or {}
         emotion = body.get("emotion") or entry.get("default_emotion") or "平静"
-        direction = self._direction_from_body(app, body)
         voice_profile = dict(profile)
         for field in ("rate", "pitch", "volume"):
             if body.get(field):
                 voice_profile[field] = body[field]
         if body.get("temperament") in prosody.TEMPERAMENTS:
             voice_profile["temperament"] = body["temperament"]
-        composed = prosody.compose_prosody(voice_profile, emotion, text, direction, app.cfg)
+        composed = prosody.compose_prosody(voice_profile, emotion, text, app.cfg)
         voice = {
             "engine": "edge",
             "edge_voice": body.get("edge_voice") or profile["edge_voice"] or entry.get("edge_voice"),
@@ -942,14 +902,14 @@ class Handler(BaseHTTPRequestHandler):
         job = tts_router.TTSJob(
             index=0, chapter_index=int(profile.get("last_seen_chapter") or 0),
             chapter_title="试听", type="dialogue", speaker=profile["name"],
-            speaker_key=key, emotion=emotion, text=text, direction=direction,
+            speaker_key=key, emotion=emotion, text=text,
             requested_engine="edge", engine="edge", voice=voice,
             speech_text=prosody.prepare_text(text, app.cfg, app.registry.lexicon),
         )
         return self._synth_preview(app, job, voice, f"cast:{key}", composed)
 
     def _preview_segment(self, app: App, body: dict) -> dict:
-        """单段即时试听：用已存剧本的 direction + 当前角色参数，不整章重跑。"""
+        """单段即时试听：用已存分段的文本 + 当前角色参数，不整章重跑。"""
         book_id = body.get("book_id") or ""
         chapter_idx = int(body.get("chapter_idx") or 0)
         job_index = int(body.get("job_index") or 0)
@@ -968,8 +928,6 @@ class Handler(BaseHTTPRequestHandler):
             })
         else:
             profile = dict(app.caster.narrator_profile())
-        stored = self._stored_direction(app, book_id, chapter_idx, job_index)
-        direction = self._direction_from_body(app, body, fallback=stored)
         emotion = body.get("emotion") or row.get("emotion") or "平静"
         text = (body.get("text") or row.get("text") or "").strip()[:300]
         for field in ("rate", "pitch", "volume"):
@@ -977,7 +935,7 @@ class Handler(BaseHTTPRequestHandler):
                 profile[field] = body[field]
         if body.get("temperament") in prosody.TEMPERAMENTS:
             profile["temperament"] = body["temperament"]
-        composed = prosody.compose_prosody(profile, emotion, text, direction, app.cfg)
+        composed = prosody.compose_prosody(profile, emotion, text, app.cfg)
         voice = {
             "engine": "edge",
             "edge_voice": body.get("edge_voice") or profile.get("edge_voice"),
@@ -986,7 +944,7 @@ class Handler(BaseHTTPRequestHandler):
         job = tts_router.TTSJob(
             index=job_index, chapter_index=chapter_idx, chapter_title="试听",
             type=row["type"], speaker=row["speaker"], speaker_key=profile.get("key", ""),
-            emotion=emotion, text=text, direction=direction,
+            emotion=emotion, text=text,
             requested_engine="edge", engine="edge", voice=voice,
             speech_text=prosody.prepare_text(text, app.cfg, app.registry.lexicon),
         )
@@ -1004,13 +962,12 @@ class Handler(BaseHTTPRequestHandler):
                 profile[field] = body[field]
         text = (body.get("text") or "这一章的开头，风从山口吹下来，带着一点凉意。")[:200]
         emotion = body.get("emotion") or profile.get("default_emotion") or "平静"
-        direction = self._direction_from_body(app, body)
-        composed = prosody.compose_prosody(profile, emotion, text, direction, app.cfg)
+        composed = prosody.compose_prosody(profile, emotion, text, app.cfg)
         voice = {"engine": "edge", "edge_voice": profile.get("edge_voice"),
                  **composed["formatted"]}
         job = tts_router.TTSJob(
             index=0, chapter_index=0, chapter_title="旁白试听", type="narration",
-            speaker="旁白", speaker_key="", emotion=emotion, text=text, direction=direction,
+            speaker="旁白", speaker_key="", emotion=emotion, text=text,
             requested_engine="edge", engine="edge", voice=voice,
             speech_text=prosody.prepare_text(text, app.cfg, app.registry.lexicon),
         )
@@ -1025,7 +982,7 @@ class Handler(BaseHTTPRequestHandler):
         payload = json.dumps({
             "label": label, "voice": {key: voice.get(key) for key in
                                       ("edge_voice", "rate", "pitch", "volume")},
-            "speech": job.speech_text, "direction": job.direction,
+            "speech": job.speech_text,
         }, ensure_ascii=False, sort_keys=True)
         digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
         out = app.preview_dir / f"{digest}.wav"
@@ -1038,7 +995,6 @@ class Handler(BaseHTTPRequestHandler):
             "text": job.text, "voice": voice.get("edge_voice"),
             "rate": voice.get("rate"), "pitch": voice.get("pitch"),
             "volume": voice.get("volume"), "emotion": job.emotion,
-            "direction": job.direction,
             "composed": {
                 "raw": {kind: round(composed["raw"][kind], 2) for kind in ("rate", "pitch", "volume")},
                 "weights": composed["weights"],
@@ -1046,32 +1002,6 @@ class Handler(BaseHTTPRequestHandler):
                 "emotion_variant": composed["emotion_variant"],
             } if composed else {},
         }
-
-    def _stored_direction(self, app: App, book_id: str, chapter_idx: int, job_index: int) -> dict:
-        path = app.book_dir(book_id) / "scripts" / f"ch{chapter_idx:03d}.json"
-        if not path.exists():
-            return prosody.default_direction()
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            return prosody.default_direction()
-        for item in data.get("jobs") or []:
-            if int(item.get("index", -1)) == job_index and isinstance(item.get("direction"), dict):
-                return dict(prosody.default_direction(), **item["direction"])
-        return prosody.default_direction()
-
-    def _direction_from_body(self, app: App, body: dict, fallback: dict | None = None) -> dict:
-        base = dict(prosody.default_direction(), **(fallback or {}))
-        raw = body.get("direction")
-        if isinstance(raw, dict):
-            base.update(raw)
-        for key in ("pace", "volume", "pause_after_ms", "emphasis"):
-            if key in body:
-                base[key] = body[key]
-        item = director_mod.normalize_item({"index": 1, **base},
-                                           int(app.cfg["script"].get("director", {})
-                                               .get("pause_after_max_ms", 1200)))
-        return item or prosody.default_direction()
 
     def _list_outputs(self, app: App, book_id: str) -> list[dict]:
         rows = {(row["chapter_idx"], row["kind"]): row for row in app.db.outputs(book_id)}

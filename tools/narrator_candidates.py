@@ -39,7 +39,6 @@ def make_job(index: int, text: str, voice: dict, lexicon: dict) -> TTSJob:
         index=index, chapter_index=1, chapter_title="旁白候选", type="narration",
         speaker="旁白", speaker_key="旁白", emotion="平静", text=text,
         requested_engine="edge", engine="edge", voice=dict(voice),
-        direction=prosody.default_direction(),
         speech_text=prosody.prepare_text(text, CFG, lexicon),
     )
 

@@ -643,46 +643,18 @@ async function copyCastConfig() {
   } catch (err) { toast(err.message, true); }
 }
 
-// ------------------------------------------------------------------ 导演层设置
-async function loadDirectorEstimate() {
-  const node = document.getElementById('directorEstimate');
-  if (!S.bookId) { node.textContent = '预计送审 —（先选择书）'; return; }
-  try {
-    S.directorEstimate = await api(`/api/books/${encodeURIComponent(S.bookId)}/director-estimate`);
-    renderDirectorEstimate();
-  } catch (err) { node.textContent = '预计送审 —'; }
-}
-
-function renderDirectorEstimate() {
-  const node = document.getElementById('directorEstimate');
-  const d = S.directorEstimate;
-  if (!node || !d) return;
-  const on = document.getElementById('directorInput').checked;
-  if (!d.total) {
-    node.textContent = `预计送审 0 段（${d.missing_chapters || 0} 章尚未生成剧本）`;
-    return;
-  }
-  const missing = d.missing_chapters ? `；另有 ${d.missing_chapters} 章尚未生成剧本` : '';
-  node.textContent = on
-    ? `预计送审 ${d.sent}/${d.total} 段（默认 ${d.default_count} 段${missing}）`
-    : `导演已关闭（开启后预计送审 ${d.sent}/${d.total} 段${missing}）`;
-}
-
+// ------------------------------------------------------------------ 停顿模板设置
 async function loadSettings() {
   try {
     const data = await api('/api/settings');
     S.settings = data;
     S.temperaments = data.temperaments || [];
-    const director = document.getElementById('directorInput');
-    director.checked = !!(data.director && data.director.enabled);
-    director.onchange = renderDirectorEstimate;
     const template = data.pause_template || {};
     for (const key of Object.keys(template)) {
       const input = document.getElementById('pause_' + key);
       if (input) input.value = template[key];
     }
     renderCast(S.narrator);
-    loadDirectorEstimate();
   } catch (err) { toast(err.message, true); }
 }
 
@@ -697,7 +669,6 @@ async function saveSettings() {
     const data = await api('/api/settings', {
       method: 'PATCH',
       body: JSON.stringify({
-        director_enabled: document.getElementById('directorInput').checked,
         pause_template: template,
       }),
     });
@@ -788,9 +759,8 @@ async function previewSegment(tr) {
     const audio = document.getElementById('segmentAudio');
     audio.src = data.url + '&t=' + Date.now();
     await audio.play().catch(() => {});
-    const direction = data.direction || {};
     hint.textContent = `${data.voice} ｜ ${data.rate} / ${data.pitch} / ${data.volume} ｜ ` +
-      `pace ${direction.pace || 'normal'} ｜ ${data.duration_ms / 1000}s`;
+      `${data.duration_ms / 1000}s`;
   } catch (err) { hint.textContent = ''; toast(err.message, true); }
 }
 
